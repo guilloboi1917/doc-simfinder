@@ -6,9 +6,6 @@ use std::{
 
 use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
 use rayon::{iter::Chunks, prelude::*};
-use strsim::{
-    damerau_levenshtein, levenshtein, normalized_damerau_levenshtein, normalized_levenshtein,
-};
 
 use crate::{
     config::{Config, SimilarityAlgorithm},

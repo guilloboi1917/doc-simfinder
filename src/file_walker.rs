@@ -41,7 +41,7 @@ pub fn walk_from_root(config: &Config) -> Result<WalkResult, WalkError> {
     let mut glob_builder = GlobSetBuilder::new();
 
     for ext in &config.file_exts {
-        glob_builder.add(Glob::new(ext)?);
+        glob_builder.add(Glob::new(format!("*{}", ext).as_str())?); // from suffix (.txt) to glob pattern (*.txt)
     }
 
     let glob_set = glob_builder.build()?;
@@ -52,7 +52,7 @@ pub fn walk_from_root(config: &Config) -> Result<WalkResult, WalkError> {
         .filter_map(|e| e.ok()) // Sketchy error handling
         .filter(|e| e.file_type().is_file() && glob_set.is_match(e.path()))
     {
-        // Update depth
+        // Update max depth
         if entry.depth() > walk_result.max_depth {
             walk_result.max_depth = entry.depth();
         }

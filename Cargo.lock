@@ -203,10 +203,10 @@ name = "doc-simfinder"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "fuzzy-matcher",
  "globset",
  "inquire",
  "rayon",
- "strsim",
  "tempfile",
  "thiserror",
  "walkdir",

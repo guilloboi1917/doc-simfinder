@@ -21,7 +21,7 @@ pub struct Config {
     // Analysis algorithm
     pub algorithm: SimilarityAlgorithm,
     // Matching threshold [0..1]
-    pub threshold: Option<f64>,
+    pub threshold: Option<f64>, // Probably will not be used when using fuzzymatcher
     // Window size
     pub window_size: usize,
     // Maximum window size
@@ -32,8 +32,21 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn validate() -> Result<(), ConfigError> {
-        todo!()
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        // Basic validation used by CLI and programmatic callers
+        if self.query.is_empty() {
+            return Err(ConfigError);
+        }
+
+        if !self.search_path.exists() {
+            return Err(ConfigError);
+        }
+
+        if self.window_size == 0 || self.max_window_size == 0 {
+            return Err(ConfigError);
+        }
+
+        Ok(())
     }
 }
 
@@ -61,5 +74,6 @@ pub enum SimilarityAlgorithm {
     LCS,
 }
 
+// Put in errors.rs
 #[derive(Debug, Clone)]
 pub struct ConfigError;

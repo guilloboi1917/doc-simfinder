@@ -22,6 +22,7 @@ fn test_present_file_score_basic() {
         path: PathBuf::from("test.txt"),
         score: 0.75,
         top_chunks: vec![scored],
+        analysis_duration: None,
     };
 
     let output = present_file_score(&fs, &Config::default());

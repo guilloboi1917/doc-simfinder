@@ -76,6 +76,13 @@ pub fn present_file_score(score: &FileScore, _config: &Config) -> String {
     let file_header = format!("File: {}", score.path.display()).bold().cyan();
     let _ = writeln!(out, "{}", file_header);
 
+    let analysis_duration = match score.analysis_duration {
+        Some(duration) => format!("Analysis duration: {:?}", duration).red().italic(),
+        None => format!("--").red(),
+    };
+
+    let _ = writeln!(out, "{}", analysis_duration);
+
     let score_str = format!("Score: {:.4}", score.score);
     let score_colored = if score.score > 0.0 {
         score_str.bold().green()

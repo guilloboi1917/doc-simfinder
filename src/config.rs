@@ -3,6 +3,7 @@ use std::path::PathBuf;
 // The config struct is what's being created by either the interactive
 // or the one-shot command.
 // It is used by the modules further down the pipeline (analysis, output, ...)
+#[derive(Debug)]
 pub struct Config {
     // Search path
     pub search_path: PathBuf,
@@ -21,7 +22,7 @@ pub struct Config {
     // Analysis algorithm
     pub algorithm: SimilarityAlgorithm,
     // Matching threshold [0..1]
-    pub threshold: Option<f64>, // Probably will not be used when using fuzzymatcher
+    pub threshold: f64,
     // Window size
     pub window_size: usize,
     // Maximum window size
@@ -61,7 +62,7 @@ impl Default for Config {
             output_file: None,
             query: Default::default(),
             algorithm: SimilarityAlgorithm::Fuzzy,
-            threshold: Some(0.5_f64),
+            threshold: 0.5_f64,
             window_size: 500,
             max_window_size: 5000,
             top_n: 5,
@@ -69,6 +70,7 @@ impl Default for Config {
     }
 }
 
+#[derive(Debug)]
 pub enum SimilarityAlgorithm {
     Fuzzy,
     LCS,

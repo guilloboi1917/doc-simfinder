@@ -2,6 +2,7 @@ use std::{
     fmt::Display,
     fs::{self},
     path::{Path, PathBuf},
+    time::Instant,
 };
 
 use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
@@ -16,17 +17,21 @@ use crate::{
 // Needs a weighting function for multiple matches within a file
 // Parallelize??
 pub fn analyse_files(files: &Vec<PathBuf>, config: &Config) -> Result<Vec<FileScore>, ScoreError> {
-    let mut results: Vec<FileScore> = Vec::new();
-    for f in files {
-        results.push(score_file(f, config)?);
-    }
-    Ok(results)
+    let start_time = Instant::now();
+    let results: Vec<Result<FileScore, ScoreError>> = files
+        .par_iter()
+        .with_min_len(2)
+        .map(|f| score_file(f, config))
+        .collect();
+    println!("{:?} elapsed", start_time.elapsed());
+    results.into_iter().collect()
 }
 
 // Stream with BufReader
 // Create set of chunks
 // Run algo on chunks using rayon
 pub fn score_file(file: &Path, config: &Config) -> Result<FileScore, ScoreError> {
+    let start_time = Instant::now();
     let query = &config.query;
     let sliding_window = calculate_sliding_window(query.len(), config);
 
@@ -59,10 +64,8 @@ pub fn score_file(file: &Path, config: &Config) -> Result<FileScore, ScoreError>
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    if let Some(threshold) = config.threshold {
-        // threshold is percentage of top chunks
-        scored_chunks.retain(|c| c.score >= threshold);
-    }
+    // threshold is percentage of top chunks
+    scored_chunks.retain(|c| c.score >= config.threshold);
 
     // There might be no chunks above threshold
     if scored_chunks.is_empty() {
@@ -70,6 +73,7 @@ pub fn score_file(file: &Path, config: &Config) -> Result<FileScore, ScoreError>
             path: file.to_path_buf(),
             score: 0.0,
             top_chunks: vec![],
+            analysis_duration: None,
         });
     }
 
@@ -82,6 +86,7 @@ pub fn score_file(file: &Path, config: &Config) -> Result<FileScore, ScoreError>
         path: file.to_path_buf(),
         score: file_score,
         top_chunks,
+        analysis_duration: Some(start_time.elapsed()),
     })
 }
 
@@ -241,6 +246,7 @@ pub struct FileScore {
     pub path: PathBuf,
     pub score: f64,
     pub top_chunks: Vec<ScoredChunk>,
+    pub analysis_duration: Option<std::time::Duration>,
 }
 
 impl Display for FileScore {

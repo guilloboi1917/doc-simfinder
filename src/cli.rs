@@ -11,7 +11,11 @@ pub struct CliArgs {
 
     /// Query string to search for
     #[arg(long)]
-    pub query: String,
+    pub query: Option<String>,
+
+    /// Interactive mode
+    #[arg(long, short, action)]
+    pub interactive: bool,
 
     /// Window size in characters
     #[arg(long, default_value_t = 500)]
@@ -28,6 +32,10 @@ pub struct CliArgs {
     /// Similarity algorithm
     #[arg(long, value_enum, default_value_t = Algorithm::Fuzzy)]
     pub algorithm: Algorithm,
+
+    /// Threshold
+    #[arg(long, short, default_value_t = 0.5_f64)]
+    pub threshold: f64,
 }
 
 #[derive(Clone, Debug, clap::ValueEnum)]
@@ -54,11 +62,12 @@ pub fn build_config_from_args(args: &CliArgs) -> Config {
 
     Config {
         search_path: args.search_path.clone(),
-        query: args.query.clone(),
+        query: args.query.clone().unwrap_or("default".to_string()),
         window_size: args.window_size,
         max_window_size: args.max_window_size,
         file_exts,
         algorithm: args.algorithm.clone().into(),
+        threshold: args.threshold,
         ..Default::default()
     }
 }

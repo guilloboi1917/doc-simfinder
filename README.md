@@ -2,8 +2,8 @@
 Concurrent Document Similarity Search 
 
 TODO:
-- cli
 - interactive cli
 - config builder
-- for all files
-- color output with indices for context
+- for various files types (if parsable)
+- allow for threshold input
+- allow for spread penalty factor input

@@ -40,8 +40,8 @@ Short: concurrent document similarity search (Rust). Help contributors by follow
 - **Config-driven behavior**: `Config` (in `src/config.rs`) holds search parameters and defaults via `Default`. Many modules expect a `&Config` reference; prefer extending `Config` rather than scattering globals.
 
 **Dependencies & integration points**
-- See `Cargo.toml`: `clap` (CLI arg parsing), `colored` (ANSI coloring), `crossterm` (terminal control), `fuzzy-matcher` (similarity matching), `globset`, `inquire` (interactive prompts), `rayon` (parallelism), `tempfile`, `term_size`, `textwrap` (presentation formatting), `thiserror` (error handling), `walkdir` (file traversal).
-- `analysis::score_file(path, &config)` is a primary entrypoint for computing similarity for a single file; `analysis::analyse_files(&[PathBuf], &config)` processes multiple files in parallel; `file_walker::walk_from_root(&config)` returns the input file set. Keep these function signatures stable when the CLI or other callers are added.
+- See `Cargo.toml`: `clap` (CLI arg parsing), `colored` (ANSI coloring), `crossterm` (terminal control), `fuzzy-matcher` (similarity matching), `globset`, `inquire` (interactive prompts), `rayon` (parallelism for analysis), `jwalk` (parallel file traversal), `tempfile`, `term_size`, `textwrap` (presentation formatting), `thiserror` (error handling).
+- `analysis::score_file(path, &config)` is a primary entrypoint for computing similarity for a single file; `analysis::analyse_files(&[PathBuf], &config)` processes multiple files in parallel using rayon; `file_walker::walk_from_root(&config)` returns the input file set using parallel directory traversal (jwalk). Keep these function signatures stable when the CLI or other callers are added.
 
 **Developer workflows (what works now)**
 - Build: `cargo build` (from repo root).

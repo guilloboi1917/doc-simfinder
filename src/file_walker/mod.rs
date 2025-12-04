@@ -1,7 +1,7 @@
 use crate::{config::Config, errors::WalkError};
 use globset::{Glob, GlobSetBuilder};
 use std::{fmt, path::PathBuf};
-use walkdir::WalkDir;
+use jwalk::WalkDir;
 
 pub struct WalkResult {
     pub files: Vec<PathBuf>,
@@ -46,18 +46,20 @@ pub fn walk_from_root(config: &Config) -> Result<WalkResult, WalkError> {
 
     let glob_set = glob_builder.build()?;
 
+    // Use jwalk for parallel directory traversal (much faster for large trees)
+    // Parallelism is set to number of CPU cores
     for entry in WalkDir::new(&config.search_path)
         .max_depth(config.max_search_depth)
         .into_iter()
-        .filter_map(|e| e.ok()) // Sketchy error handling
+        .filter_map(|e| e.ok()) // Skip errors silently
         .filter(|e| e.file_type().is_file() && glob_set.is_match(e.path()))
     {
         // Update max depth
-        if entry.depth() > walk_result.max_depth {
-            walk_result.max_depth = entry.depth();
+        if entry.depth > walk_result.max_depth {
+            walk_result.max_depth = entry.depth;
         }
 
-        walk_result.files.push(entry.into_path());
+        walk_result.files.push(entry.path());
     }
 
     Ok(walk_result)

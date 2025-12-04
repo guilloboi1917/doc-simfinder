@@ -107,8 +107,23 @@ pub fn score_file(file: &Path, config: &Config) -> Result<FileScore, ScoreError>
 
 /// Check if a file appears to be binary by reading the first few bytes
 fn is_likely_binary(file: &Path) -> Result<bool, std::io::Error> {
+    // Quick extension check first (avoids I/O for obvious cases)
+    if let Some(ext) = file.extension() {
+        let ext_lower = ext.to_string_lossy().to_lowercase();
+        // Common binary extensions
+        if matches!(ext_lower.as_str(), 
+            "exe" | "dll" | "so" | "dylib" | "bin" | "obj" | "o" | 
+            "zip" | "tar" | "gz" | "7z" | "rar" | "bz2" |
+            "png" | "jpg" | "jpeg" | "gif" | "bmp" | "ico" | "webp" |
+            "mp3" | "mp4" | "avi" | "mkv" | "mov" | "flac" | "wav" |
+            "pdf" | "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx"
+        ) {
+            return Ok(true);
+        }
+    }
+    
     let mut file = File::open(file)?;
-    let mut buffer = [0u8; 8192]; // Check first 8KB
+    let mut buffer = [0u8; 1024]; // Check first 1KB (reduced from 8KB)
     let bytes_read = file.read(&mut buffer)?;
     
     if bytes_read == 0 {
@@ -148,26 +163,37 @@ fn get_chunks(file: &Path, window: &SlidingWindow) -> Result<Vec<Chunk>, ChunkEr
         }
     })?;
     
-    let chars: Vec<char> = content.chars().collect();
+    // More efficient: work with char indices directly instead of collecting all chars
+    let char_indices: Vec<(usize, char)> = content.char_indices().collect();
+    let char_count = char_indices.len();
 
     let mut chunks: Vec<Chunk> = Vec::new();
-    let mut start = 0;
+    let mut start_idx = 0;
 
-    while start < chars.len() {
-        let end = (start + window.window_size).min(chars.len());
-        let chunk_text: String = chars[start..end].iter().collect();
+    while start_idx < char_count {
+        let end_idx = (start_idx + window.window_size).min(char_count);
+        
+        // Get byte positions for slicing
+        let start_byte = char_indices[start_idx].0;
+        let end_byte = if end_idx < char_count {
+            char_indices[end_idx].0
+        } else {
+            content.len()
+        };
+        
+        let chunk_text = content[start_byte..end_byte].to_string();
 
         chunks.push(Chunk {
             text: chunk_text,
-            start_byte: start,
-            end_byte: end,
+            start_byte: start_idx,
+            end_byte: end_idx,
         });
 
-        if end == chars.len() {
+        if end_idx == char_count {
             break;
         }
 
-        start = end.saturating_sub(window.overlap);
+        start_idx = end_idx.saturating_sub(window.overlap);
     }
 
     Ok(chunks)

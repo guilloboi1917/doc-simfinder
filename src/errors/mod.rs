@@ -2,8 +2,8 @@
 pub enum WalkError {
     #[error("Failed to build glob pattern: {0}")]
     GlobBuild(#[from] globset::Error),
-    #[error("WalkDir error: {0}")]
-    WalkDir(#[from] walkdir::Error),
+    #[error("File walk error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 #[derive(Debug, thiserror::Error)]

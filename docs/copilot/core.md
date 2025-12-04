@@ -41,7 +41,32 @@ fn score_file(file: &Path, config: &Config) -> Result<FileScore, ScoreError>
 
 // Algorithm: window → chunks → score → normalize → filter → top N
 // Parallel: rayon with min 2 files/thread, 50 chunks/thread
+// Error handling: Gracefully skips files with invalid UTF-8 or binary content
 ```
+
+## Error Handling
+
+**New as of 2025-12-04**: Robust handling of problematic files during analysis.
+
+### Binary File Detection
+- `is_likely_binary(file: &Path)` checks first 8KB of file
+- Detects null bytes or >30% non-printable characters
+- Prevents attempting UTF-8 read on binary files
+
+### Error Types (from `src/errors/mod.rs`)
+```rust
+pub enum ChunkError {
+    Io(std::io::Error),               // General IO errors
+    InvalidUtf8(String),              // File path with invalid UTF-8
+    BinaryFile(String),               // Binary file path
+}
+```
+
+### Graceful Degradation
+- `analyse_files()` uses `filter_map()` to skip problematic files
+- Errors logged to stderr with "Warning: Skipping file -" prefix
+- Processing continues with remaining valid files
+- No panics on encountering invalid UTF-8 or binary files
 
 ## Integration
 

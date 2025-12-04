@@ -321,17 +321,28 @@ impl Dashboard {
             })
             .collect();
 
-        let file_list = List::new(items).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title("Files")
-                .border_style(if is_focused {
-                    Style::default().fg(Color::Yellow)
-                } else {
-                    Style::default()
-                }),
-        );
-        frame.render_widget(file_list, left);
+        let file_list = List::new(items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Files")
+                    .border_style(if is_focused {
+                        Style::default().fg(Color::Yellow)
+                    } else {
+                        Style::default()
+                    }),
+            )
+            .highlight_style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
+            );
+        
+        // Create stateful list with selection to enable scrolling
+        let mut list_state = ratatui::widgets::ListState::default();
+        list_state.select(Some(selected_index));
+        
+        frame.render_stateful_widget(file_list, left, &mut list_state);
 
         // Right panel (preview, stats, actions)
         let (preview_area, stats_area, actions_area) = right_panel_split(right);

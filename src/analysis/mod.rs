@@ -1,6 +1,7 @@
 use std::{
     fmt::Display,
-    fs::{self},
+    fs::{self, File},
+    io::Read,
     path::{Path, PathBuf},
     time::Instant,
 };
@@ -17,14 +18,28 @@ use crate::{
 // Needs a weighting function for multiple matches within a file
 // Parallelize??
 pub fn analyse_files(files: &Vec<PathBuf>, config: &Config) -> Result<Vec<FileScore>, ScoreError> {
-    let start_time = Instant::now();
     let results: Vec<Result<FileScore, ScoreError>> = files
         .par_iter()
         .with_min_len(2)
         .map(|f| score_file(f, config))
         .collect();
-    println!("{:?} elapsed", start_time.elapsed());
-    results.into_iter().collect()
+    
+    // Filter out errors gracefully - skip files that can't be read
+    let successful_results: Vec<FileScore> = results
+        .into_iter()
+        .filter_map(|result| {
+            match result {
+                Ok(score) => Some(score),
+                Err(e) => {
+                    // Log the error but continue processing other files
+                    eprintln!("Warning: Skipping file - {}", e);
+                    None
+                }
+            }
+        })
+        .collect();
+    
+    Ok(successful_results)
 }
 
 // Stream with BufReader
@@ -90,11 +105,49 @@ pub fn score_file(file: &Path, config: &Config) -> Result<FileScore, ScoreError>
     })
 }
 
+/// Check if a file appears to be binary by reading the first few bytes
+fn is_likely_binary(file: &Path) -> Result<bool, std::io::Error> {
+    let mut file = File::open(file)?;
+    let mut buffer = [0u8; 8192]; // Check first 8KB
+    let bytes_read = file.read(&mut buffer)?;
+    
+    if bytes_read == 0 {
+        return Ok(false); // Empty file, treat as text
+    }
+    
+    // Check for null bytes (common in binary files)
+    let has_null = buffer[..bytes_read].contains(&0);
+    
+    // Check for high ratio of non-printable characters
+    let non_printable_count = buffer[..bytes_read]
+        .iter()
+        .filter(|&&b| b < 32 && b != b'\n' && b != b'\r' && b != b'\t')
+        .count();
+    
+    let non_printable_ratio = non_printable_count as f64 / bytes_read as f64;
+    
+    Ok(has_null || non_printable_ratio > 0.3)
+}
+
 // We want some dynamic window sizing based on the query string.
 fn get_chunks(file: &Path, window: &SlidingWindow) -> Result<Vec<Chunk>, ChunkError> {
-    // Use thiserror later
-    // For convenience we load the whole file, maybe put some file size restrictions
-    let content = fs::read_to_string(file).expect("failed to read to string");
+    // Check if file is likely binary before attempting to read as UTF-8
+    if is_likely_binary(file)? {
+        return Err(ChunkError::BinaryFile(
+            file.display().to_string()
+        ));
+    }
+    
+    // Attempt to read file as UTF-8 text
+    let content = fs::read_to_string(file).map_err(|e| {
+        // Check if it's a UTF-8 error specifically
+        if e.kind() == std::io::ErrorKind::InvalidData {
+            ChunkError::InvalidUtf8(file.display().to_string())
+        } else {
+            ChunkError::Io(e)
+        }
+    })?;
+    
     let chars: Vec<char> = content.chars().collect();
 
     let mut chunks: Vec<Chunk> = Vec::new();

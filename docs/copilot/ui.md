@@ -29,6 +29,9 @@ Uses: `colored` (ANSI), `textwrap`, `term_size`
 
 **Results State Widgets**:
 - `FileListWidget`: Scrollable file results with Up/Down/Enter (focusable)
+  - **Scrolling**: Uses `ListState` with `render_stateful_widget()` for automatic viewport scrolling
+  - Selected item (▶ prefix) stays visible when scrolling through long lists
+  - Viewport automatically adjusts to keep selection centered/visible
 - `FilePreviewWidget`: Chunk display with syntax highlighting, colored styling, automatic text wrapping (focusable)
 - `StatsWidget`: Total/matched files, analysis duration (read-only, not focusable)
 - `ActionPanel`: Available keyboard shortcuts including "Ctrl+O: Open Location" (read-only, not focusable)

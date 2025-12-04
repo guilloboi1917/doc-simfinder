@@ -3,7 +3,7 @@ use std::path::PathBuf;
 // The config struct is what's being created by either the interactive
 // or the one-shot command.
 // It is used by the modules further down the pipeline (analysis, output, ...)
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
     // Search path
     pub search_path: PathBuf,
@@ -70,7 +70,7 @@ impl Default for Config {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SimilarityAlgorithm {
     Fuzzy,
     LCS,

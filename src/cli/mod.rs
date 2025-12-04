@@ -13,9 +13,9 @@ pub struct CliArgs {
     #[arg(long)]
     pub query: Option<String>,
 
-    /// Interactive mode
-    #[arg(long, short, action)]
-    pub interactive: bool,
+    /// TUI mode (interactive terminal UI with state machine)
+    #[arg(long, action)]
+    pub tui: bool,
 
     /// Window size in characters
     #[arg(long, default_value_t = 500)]
@@ -62,7 +62,7 @@ pub fn build_config_from_args(args: &CliArgs) -> Config {
 
     Config {
         search_path: args.search_path.clone(),
-        query: args.query.clone().unwrap_or("default".to_string()),
+        query: args.query.clone().unwrap_or("".to_string()),
         window_size: args.window_size,
         max_window_size: args.max_window_size,
         file_exts,

@@ -228,20 +228,21 @@ pub struct SlidingWindow {
 
 // Think of tradeoffs, storing chunk data
 // or only references using start_byte, end_byte and read from it later.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Chunk {
     pub text: String,
     pub start_byte: usize,
     pub end_byte: usize,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ScoredChunk {
     pub score: f64,
     pub indices: Option<Vec<usize>>,
     pub chunk: Chunk,
 }
 
+#[derive(Debug, Clone)]
 pub struct FileScore {
     pub path: PathBuf,
     pub score: f64,

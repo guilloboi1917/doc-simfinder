@@ -13,6 +13,8 @@ fn test_dashboard_creation() {
         config,
         validation_errors: vec![],
         walk_result: None,
+        autocomplete_available: false,
+        autocomplete_suggestion: None,
     };
     let _dashboard = Dashboard::new_for_state(&state);
     // Test that dashboard was created without panicking

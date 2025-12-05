@@ -13,6 +13,8 @@ fn test_app_creation() {
         config: Config::default(),
         validation_errors: vec![],
         walk_result: None,
+        autocomplete_available: false,
+        autocomplete_suggestion: None,
     };
     let app = App::new(initial_state);
     assert!(!app.should_quit);
@@ -24,6 +26,8 @@ async fn test_quit_handling() {
         config: Config::default(),
         validation_errors: vec![],
         walk_result: None,
+        autocomplete_available: false,
+        autocomplete_suggestion: None,
     };
     let mut app = App::new(initial_state);
 
@@ -42,6 +46,8 @@ async fn test_character_input_no_duplication() {
         config: Config::default(),
         validation_errors: vec![],
         walk_result: None,
+        autocomplete_available: false,
+        autocomplete_suggestion: None,
     };
     let mut app = App::new(initial_state);
 
@@ -66,6 +72,8 @@ fn test_query_input() {
         config: Config::default(),
         validation_errors: vec![],
         walk_result: None,
+        autocomplete_available: false,
+        autocomplete_suggestion: None,
     };
     let mut app = App::new(initial_state);
 
@@ -93,6 +101,8 @@ async fn test_backspace_in_input() {
         config: Config::default(),
         validation_errors: vec![],
         walk_result: None,
+        autocomplete_available: false,
+        autocomplete_suggestion: None,
     };
     let mut app = App::new(initial_state);
 
@@ -119,6 +129,8 @@ async fn test_key_release_events_ignored() {
         config: Config::default(),
         validation_errors: vec![],
         walk_result: None,
+        autocomplete_available: false,
+        autocomplete_suggestion: None,
     };
     let mut app = App::new(initial_state);
 

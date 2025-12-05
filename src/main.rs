@@ -10,7 +10,7 @@ use doc_simfinder::{
 #[tokio::main]
 async fn main() {
     let args = CliArgs::parse();
-    
+
     // Check if TUI mode is requested
     if args.tui {
         if let Err(e) = run_tui_mode(&args).await {
@@ -19,7 +19,7 @@ async fn main() {
         }
         return;
     }
-    
+
     // CLI mode requires a query
     if args.query.is_none() {
         eprintln!("Error: --query is required in CLI mode. Use --tui for interactive mode.");
@@ -65,29 +65,31 @@ async fn main() {
 async fn run_tui_mode(args: &CliArgs) -> Result<(), Box<dyn std::error::Error>> {
     use doc_simfinder::{
         state_machine::AppState,
-        tui::{App, setup_terminal, restore_terminal},
+        tui::{App, restore_terminal, setup_terminal},
     };
 
     // Build initial config
     let config = build_config_from_args(args);
-    
+
     // Create initial state
     let initial_state = AppState::Configuring {
         config,
         validation_errors: vec![],
         walk_result: None,
+        autocomplete_available: false,
+        autocomplete_suggestion: None,
     };
-    
+
     // Setup terminal
     let mut terminal = setup_terminal()?;
-    
+
     // Create and run app
     let mut app = App::new(initial_state);
     let result = app.run(&mut terminal);
-    
+
     // Restore terminal
     restore_terminal(&mut terminal)?;
-    
+
     result?;
     Ok(())
 }

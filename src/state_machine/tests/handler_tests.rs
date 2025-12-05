@@ -14,6 +14,8 @@ fn test_configuring_handler() {
         config: Config::default(),
         validation_errors: vec![],
         walk_result: None,
+        autocomplete_available: false,
+        autocomplete_suggestion: None,
     };
 
     let events = handler.handle_key(

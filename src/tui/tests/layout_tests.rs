@@ -14,6 +14,8 @@ fn test_layout_creation() {
         config,
         validation_errors: vec![],
         walk_result: None,
+        autocomplete_available: false,
+        autocomplete_suggestion: None,
     };
 
     let layout = LayoutConfig::for_state(&state);

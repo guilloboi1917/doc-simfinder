@@ -118,12 +118,12 @@ impl App {
                 self.should_quit = true;
                 return;
             }
-            KeyCode::Tab => {
-                self.focus_manager.move_focus(FocusDirection::Next);
+            KeyCode::Char('j') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+                self.focus_manager.move_focus(FocusDirection::Previous);
                 return;
             }
-            KeyCode::BackTab => {
-                self.focus_manager.move_focus(FocusDirection::Previous);
+            KeyCode::Char('k') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+                self.focus_manager.move_focus(FocusDirection::Next);
                 return;
             }
             _ => {}
@@ -136,17 +136,60 @@ impl App {
         // If no events generated, try text input handling for editable fields
         if events.is_empty() {
             match key.code {
+                KeyCode::Tab => {
+                    use super::focus::Focus;
+                    // Handle Tab for autocomplete when PathInput is focused
+                    if self.focus_manager.is_focused(Focus::PathInput) {
+                        if let AppState::Configuring {
+                            config,
+                            autocomplete_available,
+                            autocomplete_suggestion,
+                            ..
+                        } = self.current_state_mut()
+                        {
+                            if *autocomplete_available {
+                                if let Some(suggestion) = autocomplete_suggestion.clone() {
+                                    config.search_path = std::path::PathBuf::from(&suggestion);
+                                    *autocomplete_available = false;
+                                    *autocomplete_suggestion = None;
+
+                                    // Trigger file walker for new path
+                                    let config_clone = config.clone();
+                                    let tx_clone = self.walker_event_tx.clone();
+                                    tokio::spawn(async move {
+                                        Self::run_filewalker_task(config_clone, tx_clone).await;
+                                    });
+                                }
+                            }
+                        }
+                        return;
+                    }
+                }
                 KeyCode::Char(c) => {
                     use super::focus::Focus;
                     // Check focus first before borrowing state mutably
                     let current_focus = self.focus_manager.current();
                     match current_focus {
                         Focus::PathInput => {
-                            if let AppState::Configuring { config, .. } = self.current_state_mut() {
+                            if let AppState::Configuring {
+                                config,
+                                autocomplete_available,
+                                autocomplete_suggestion,
+                                ..
+                            } = self.current_state_mut()
+                            {
                                 let mut path_str = config.search_path.to_string_lossy().to_string();
                                 path_str.push(c);
-                                config.search_path = std::path::PathBuf::from(path_str);
-                                
+                                config.search_path = std::path::PathBuf::from(&path_str);
+
+                                // Update autocomplete suggestions
+                                Self::update_autocomplete(
+                                    &path_str,
+                                    &config.search_path,
+                                    autocomplete_available,
+                                    autocomplete_suggestion,
+                                );
+
                                 // Trigger file walker for new path
                                 let config_clone = config.clone();
                                 let tx_clone = self.walker_event_tx.clone();
@@ -171,11 +214,25 @@ impl App {
                     let current_focus = self.focus_manager.current();
                     match current_focus {
                         Focus::PathInput => {
-                            if let AppState::Configuring { config, .. } = self.current_state_mut() {
+                            if let AppState::Configuring {
+                                config,
+                                autocomplete_available,
+                                autocomplete_suggestion,
+                                ..
+                            } = self.current_state_mut()
+                            {
                                 let mut path_str = config.search_path.to_string_lossy().to_string();
                                 path_str.pop();
-                                config.search_path = std::path::PathBuf::from(path_str);
-                                
+                                config.search_path = std::path::PathBuf::from(&path_str);
+
+                                // Update autocomplete suggestions
+                                Self::update_autocomplete(
+                                    &path_str,
+                                    &config.search_path,
+                                    autocomplete_available,
+                                    autocomplete_suggestion,
+                                );
+
                                 // Trigger file walker for modified path
                                 let config_clone = config.clone();
                                 let tx_clone = self.walker_event_tx.clone();
@@ -208,14 +265,20 @@ impl App {
 
             // If StartAnalysis or Reanalyze event, spawn background task
             if matches!(event, StateEvent::StartAnalysis) {
-                if let AppState::Configuring { config, walk_result, .. } = self.state_machine.current_state() {
+                if let AppState::Configuring {
+                    config,
+                    walk_result,
+                    ..
+                } = self.state_machine.current_state()
+                {
                     // Only start analysis if we have walk results
                     if let Some(walk_result) = walk_result {
                         let config_clone = config.clone();
                         let walk_result_clone = walk_result.clone();
                         let tx_clone = self.analysis_event_tx.clone();
                         tokio::spawn(async move {
-                            Self::run_analysis_task(config_clone, walk_result_clone, tx_clone).await;
+                            Self::run_analysis_task(config_clone, walk_result_clone, tx_clone)
+                                .await;
                         });
                     }
                 }
@@ -224,7 +287,7 @@ impl App {
                 if let Some(config) = self.state_machine.current_state().config() {
                     let config_clone = config.clone();
                     let tx_walker = self.walker_event_tx.clone();
-                    
+
                     tokio::spawn(async move {
                         // First run file walker
                         Self::run_filewalker_task(config_clone.clone(), tx_walker).await;
@@ -253,6 +316,61 @@ impl App {
     /// Get a mutable reference to the current state (private helper)
     fn current_state_mut(&mut self) -> &mut AppState {
         self.state_machine.current_state_mut()
+    }
+
+    /// Update autocomplete suggestions based on current path
+    fn update_autocomplete(
+        path_str: &str,
+        current_path: &std::path::Path,
+        autocomplete_available: &mut bool,
+        autocomplete_suggestion: &mut Option<String>,
+    ) {
+        *autocomplete_available = false;
+        *autocomplete_suggestion = None;
+
+        if current_path.is_dir() {
+            return;
+        }
+
+        let Some(parent) = current_path.parent() else {
+            return;
+        };
+
+        let Some(partial_name) = current_path.file_name().and_then(|n| n.to_str()) else {
+            return;
+        };
+
+        if partial_name.is_empty() {
+            return;
+        }
+
+        let Ok(read_dir) = std::fs::read_dir(parent) else {
+            return;
+        };
+
+        let matches: Vec<std::path::PathBuf> = read_dir
+            .flatten()
+            .filter(|entry| {
+                entry.path().is_dir()
+                    && entry
+                        .file_name()
+                        .to_string_lossy()
+                        .starts_with(partial_name)
+            })
+            .map(|entry| entry.path())
+            .collect();
+
+        if matches.len() == 1 {
+            *autocomplete_available = true;
+            // Normalize path separators to match user input style
+            let suggestion = matches.first().unwrap().to_string_lossy().to_string();
+            let normalized = if path_str.contains('/') {
+                suggestion.replace('\\', "/")
+            } else {
+                suggestion
+            };
+            *autocomplete_suggestion = Some(normalized);
+        }
     }
 
     async fn run_filewalker_task(

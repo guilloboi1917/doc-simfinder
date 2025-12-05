@@ -16,6 +16,8 @@ pub enum AppState {
         config: Config,
         validation_errors: Vec<String>,
         walk_result: Option<WalkResult>,
+        autocomplete_available: bool,
+        autocomplete_suggestion: Option<String>,
     },
 
     /// Analysis in progress state

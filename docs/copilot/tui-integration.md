@@ -18,10 +18,13 @@ Background Tasks (tokio) → StateEvent channel → StateMachine
 
 ## Input System
 
-**Global**: Tab/BackTab (focus), Ctrl+Q (quit)
-**Configuring**: Char/Backspace (edit PathInput/QueryInput), Enter (start analysis when valid)
-**Results**: Ctrl+R (reanalyze), Ctrl+S (save), f (filter), s (sort)
-**Detail**: j/k (scroll), PgUp/PgDn, g/G (top/bottom), n/p (next match)
+**Global**: Ctrl+J/K (focus previous/next), Ctrl+Q (quit)
+**Configuring**: 
+  - Char/Backspace (edit PathInput/QueryInput)
+  - Tab (accept autocomplete suggestion when available)
+  - Enter (start analysis when valid)
+**Results**: j/k (navigate list), Ctrl+R (reanalyze), Ctrl+O (open location), Enter (view detail), Esc (back)
+**Detail**: j/k (scroll), PgUp/PgDn, Ctrl+O (open location), Esc (back)
 
 ### Text Input Pattern (Configuring State)
 - Character input (`KeyCode::Char(c)`) handled in `App::handle_key()` before state handlers
@@ -29,6 +32,15 @@ Background Tasks (tokio) → StateEvent channel → StateMachine
 - **Updates Config directly** - no separate input buffers (Config is single source of truth)
 - Widgets render directly from Config values (`config.search_path`, `config.query`)
 - Config validation happens on every keystroke for real-time feedback in StartButton
+
+### Autocomplete Pattern (PathInput)
+- **Trigger**: Character input or backspace in PathInput field
+- **Implementation**: `App::update_autocomplete()` helper function
+- **Matching**: Scans parent directory for directories starting with partial name
+- **Display**: Suggestion shown in gray italic text appended to current input
+- **Acceptance**: Tab key updates path to suggestion and triggers file walker
+- **Path Normalization**: Matches user's separator style (forward slash vs backslash on Windows)
+- **State Fields**: `autocomplete_available: bool`, `autocomplete_suggestion: Option<String>` in `Configuring` state
 
 ## Widget Trait
 

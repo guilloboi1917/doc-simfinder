@@ -7,26 +7,53 @@
 ## States
 ```rust
 pub enum AppState {
-    Configuring { config, validation_errors },
+    Configuring { 
+        config, 
+        validation_errors, 
+        walk_result: Option<WalkResult>,
+        autocomplete_available: bool,
+        autocomplete_suggestion: Option<String>
+    },
     Analyzing { config, path, query, files_processed, total_files },
-    ViewingResults { config, results, selected_index, sort_mode, filter },
-    ViewingFileDetail { config, file_result, scroll_position },
+    ViewingResults { config, results, selected_index, sort_mode, filter, total_duration },
+    ViewingFileDetail { config, file_result, scroll_position, previous_results },
     Error { message, previous_state },
     Exiting,
 }
 ```
 
+### State Field Details
+
+**Configuring State**:
+- `walk_result`: Contains file list from background walker task, updated as user types path
+- `autocomplete_available`: True when a single directory match exists for partial path
+- `autocomplete_suggestion`: Full path suggestion to display (with normalized separators)
+
+**ViewingResults State**:
+- `total_duration`: Tracks analysis elapsed time for display in stats panel
+
+**ViewingFileDetail State**:
+- `previous_results`: Boxed ViewingResults state to return to on GoBack event
+
 ## Events
 ```rust
 pub enum StateEvent {
-    // Config: UpdatePath, UpdateQuery, ValidateConfig, StartAnalysis
-    // Analysis (sent by background task): AnalysisProgress{files_done, total}, AnalysisComplete(Vec<FileScore>), AnalysisError(String)
+    // Config: UpdatePath, UpdateQuery, ValidateConfig, StartAnalysis, FileWalkComplete{walk_result}
+    // Analysis (sent by background task): AnalysisProgress{files_done, total}, AnalysisComplete{results, elapsed}, AnalysisError(String)
     // Navigation: SelectFile(usize), OpenSelectedFile, GoBack
     // View: ChangeSortMode, SetFilter, ScrollUp, ScrollDown
-    // Actions: SaveResults, ExportResults, Reanalyze
+    // Actions: Reanalyze, OpenFileLocation
     // Global: ShowHelp, HideHelp, Quit
 }
 ```
+
+### Event Details
+
+**FileWalkComplete**: Sent by background walker task when file discovery completes, contains `WalkResult` with list of found files
+
+**AnalysisComplete**: Now includes `elapsed: Duration` field for performance tracking
+
+**OpenFileLocation**: Opens file's parent directory in system file manager (Windows Explorer, macOS Finder, etc.)
 
 ## Transition Table
 

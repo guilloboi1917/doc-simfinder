@@ -68,10 +68,10 @@ impl InputHandler for ResultsHandler {
         {
             match key.code {
                 // Navigation
-                KeyCode::Up | KeyCode::Char('k') if *selected_index > 0 => {
+                KeyCode::Up | KeyCode::Char('j') if *selected_index > 0 => {
                     events.push(StateEvent::SelectFile(selected_index - 1));
                 }
-                KeyCode::Down | KeyCode::Char('j')
+                KeyCode::Down | KeyCode::Char('k')
                     if *selected_index < results.len().saturating_sub(1) =>
                 {
                     events.push(StateEvent::SelectFile(selected_index + 1));
@@ -133,10 +133,10 @@ impl InputHandler for FileDetailHandler {
 
         match key.code {
             // Scrolling
-            KeyCode::Up | KeyCode::Char('k') => {
+            KeyCode::Up | KeyCode::Char('j') => {
                 events.push(StateEvent::ScrollUp);
             }
-            KeyCode::Down | KeyCode::Char('j') => {
+            KeyCode::Down | KeyCode::Char('k') => {
                 events.push(StateEvent::ScrollDown);
             }
             KeyCode::PageUp => {

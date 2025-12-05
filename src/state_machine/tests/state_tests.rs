@@ -12,6 +12,8 @@ fn test_state_machine_creation() {
         config,
         validation_errors: vec![],
         walk_result: None,
+        autocomplete_available: false,
+        autocomplete_suggestion: None,
     };
     let sm = StateMachine::new(initial_state);
     assert!(matches!(sm.current_state(), AppState::Configuring { .. }));
@@ -24,6 +26,8 @@ fn test_state_config_access() {
         config: config.clone(),
         validation_errors: vec![],
         walk_result: None,
+        autocomplete_available: false,
+        autocomplete_suggestion: None,
     };
 
     // Should be able to get config reference

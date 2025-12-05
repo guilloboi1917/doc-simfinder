@@ -5,8 +5,8 @@
 use ratatui::{
     Frame,
     layout::{Position, Rect},
-    style::{Color, Modifier, Style, Stylize},
-    text::{Line, Span},
+    style::{Color, Modifier, Style},
+    text::{Line, Span, Text},
     widgets::{Block, BorderType, Borders, List, ListItem, Padding, Paragraph},
 };
 
@@ -74,7 +74,7 @@ fn build_highlighted_lines(
 
                     current_text.push(ch);
 
-                    // Move char_offset forward by the number of bytes this char takes
+                    // Move char_offset forward to the next character position
                     if let Some(idx) = found_at {
                         char_offset = idx + ch.len_utf8();
                     }
@@ -146,8 +146,18 @@ impl Dashboard {
                 config,
                 validation_errors,
                 walk_result,
+                autocomplete_available,
+                autocomplete_suggestion,
             } => {
-                self.render_configuring(frame, config, validation_errors, walk_result, focus);
+                self.render_configuring(
+                    frame,
+                    config,
+                    validation_errors,
+                    walk_result,
+                    autocomplete_available,
+                    autocomplete_suggestion,
+                    focus,
+                );
             }
             AppState::ViewingResults {
                 results,
@@ -187,6 +197,8 @@ impl Dashboard {
         config: &crate::config::Config,
         validation_errors: &[String],
         walk_result: &Option<crate::file_walker::WalkResult>,
+        autocomplete_available: &bool,
+        autocomplete_suggestion: &Option<String>,
         focus: &FocusManager,
     ) {
         let chunks = self.layout.split(frame.area());
@@ -194,7 +206,31 @@ impl Dashboard {
         // Path input - render directly from config
         if let Some(&area) = chunks.get(0) {
             let is_focused = focus.is_focused(Focus::PathInput);
-            let path_widget = Paragraph::new(config.search_path.to_string_lossy().to_string())
+            let displayed_path: Text = if *autocomplete_available {
+                if let Some(suggestion) = autocomplete_suggestion {
+                    let current_path = config.search_path.to_string_lossy();
+                    // Only show suffix if suggestion is longer than current path
+                    if suggestion.len() > current_path.len() {
+                        let suggestion_suffix = &suggestion[current_path.len()..];
+                        Text::from(Line::from(vec![
+                            Span::raw(current_path.clone()),
+                            Span::styled(
+                                suggestion_suffix,
+                                Style::default()
+                                    .fg(Color::DarkGray)
+                                    .add_modifier(Modifier::ITALIC),
+                            ),
+                        ]))
+                    } else {
+                        Text::from(current_path.to_string())
+                    }
+                } else {
+                    Text::from(config.search_path.to_string_lossy().to_string())
+                }
+            } else {
+                Text::from(config.search_path.to_string_lossy().to_string())
+            };
+            let path_widget = Paragraph::new(displayed_path)
                 .style(if config.search_path.exists() {
                     Style::default().fg(Color::Green)
                 } else {
@@ -744,6 +780,8 @@ mod tests {
             config,
             validation_errors: vec![],
             walk_result: None,
+            autocomplete_available: false,
+            autocomplete_suggestion: None,
         };
         let _dashboard = Dashboard::new_for_state(&state);
         // Test that dashboard was created

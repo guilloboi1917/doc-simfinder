@@ -2,7 +2,7 @@
 //
 // See docs/copilot/state-machine.md for transition patterns
 
-use super::{AppState, StateEvent, SortMode};
+use super::{AppState, SortMode, StateEvent};
 use std::path::Path;
 
 /// Open the file location in the system's default file manager
@@ -29,16 +29,32 @@ pub enum TransitionResult {
 pub fn transition(current_state: &mut AppState, event: StateEvent) -> TransitionResult {
     let new_state = match (&*current_state, event) {
         // Handle file walk completion in Configuring state
-        (AppState::Configuring { config, validation_errors, .. }, StateEvent::FileWalkComplete { walk_result }) => {
+        (
             AppState::Configuring {
-                config: config.clone(),
-                validation_errors: validation_errors.clone(),
-                walk_result: Some(walk_result),
-            }
-        }
+                config,
+                validation_errors,
+                autocomplete_available,
+                autocomplete_suggestion,
+                ..
+            },
+            StateEvent::FileWalkComplete { walk_result },
+        ) => AppState::Configuring {
+            config: config.clone(),
+            validation_errors: validation_errors.clone(),
+            walk_result: Some(walk_result),
+            autocomplete_available: autocomplete_available.clone(),
+            autocomplete_suggestion: autocomplete_suggestion.clone(),
+        },
 
         // Configuration -> Analyzing
-        (AppState::Configuring { config, walk_result, .. }, StateEvent::StartAnalysis) => {
+        (
+            AppState::Configuring {
+                config,
+                walk_result,
+                ..
+            },
+            StateEvent::StartAnalysis,
+        ) => {
             // Validate config before transitioning
             if let Err(_) = config.validate() {
                 return TransitionResult::Error("Invalid configuration".into());
@@ -61,13 +77,23 @@ pub fn transition(current_state: &mut AppState, event: StateEvent) -> Transition
         }
 
         // Analyzing -> ViewingResults
-        (AppState::Analyzing { config, .. }, StateEvent::AnalysisComplete { mut results, elapsed }) => {
+        (
+            AppState::Analyzing { config, .. },
+            StateEvent::AnalysisComplete {
+                mut results,
+                elapsed,
+            },
+        ) => {
             // Filter out results below threshold
             results.retain(|r| r.score >= config.threshold);
-            
+
             // Sort by score (descending - highest first)
-            results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-            
+            results.sort_by(|a, b| {
+                b.score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+
             AppState::ViewingResults {
                 config: config.clone(),
                 results,
@@ -79,12 +105,10 @@ pub fn transition(current_state: &mut AppState, event: StateEvent) -> Transition
         }
 
         // Analyzing -> Error
-        (AppState::Analyzing { .. }, StateEvent::AnalysisError(msg)) => {
-            AppState::Error {
-                message: msg,
-                previous_state: Some(Box::new(current_state.clone())),
-            }
-        }
+        (AppState::Analyzing { .. }, StateEvent::AnalysisError(msg)) => AppState::Error {
+            message: msg,
+            previous_state: Some(Box::new(current_state.clone())),
+        },
 
         // Progress updates within Analyzing state
         (
@@ -94,10 +118,7 @@ pub fn transition(current_state: &mut AppState, event: StateEvent) -> Transition
                 query,
                 ..
             },
-            StateEvent::AnalysisProgress {
-                files_done,
-                total,
-            },
+            StateEvent::AnalysisProgress { files_done, total },
         ) => {
             // Create new state with updated progress
             AppState::Analyzing {
@@ -131,7 +152,7 @@ pub fn transition(current_state: &mut AppState, event: StateEvent) -> Transition
                     filter: filter.clone(),
                     total_duration: *total_duration,
                 });
-                
+
                 AppState::ViewingFileDetail {
                     config: config.clone(),
                     file_result: file_result.clone(),
@@ -144,7 +165,17 @@ pub fn transition(current_state: &mut AppState, event: StateEvent) -> Transition
         }
 
         // Selection changes within ViewingResults
-        (AppState::ViewingResults { config, results, sort_mode, filter, total_duration, .. }, StateEvent::SelectFile(index)) => {
+        (
+            AppState::ViewingResults {
+                config,
+                results,
+                sort_mode,
+                filter,
+                total_duration,
+                ..
+            },
+            StateEvent::SelectFile(index),
+        ) => {
             if index < results.len() {
                 AppState::ViewingResults {
                     config: config.clone(),
@@ -160,75 +191,115 @@ pub fn transition(current_state: &mut AppState, event: StateEvent) -> Transition
         }
 
         // Sort mode changes within ViewingResults
-        (AppState::ViewingResults { config, results, selected_index, filter, total_duration, .. }, StateEvent::ChangeSortMode(new_mode)) => {
+        (
             AppState::ViewingResults {
-                config: config.clone(),
-                results: results.clone(),
-                selected_index: *selected_index,
-                sort_mode: new_mode,
-                filter: filter.clone(),
-                total_duration: *total_duration,
-            }
-        }
+                config,
+                results,
+                selected_index,
+                filter,
+                total_duration,
+                ..
+            },
+            StateEvent::ChangeSortMode(new_mode),
+        ) => AppState::ViewingResults {
+            config: config.clone(),
+            results: results.clone(),
+            selected_index: *selected_index,
+            sort_mode: new_mode,
+            filter: filter.clone(),
+            total_duration: *total_duration,
+        },
 
         // Filter changes within ViewingResults
-        (AppState::ViewingResults { config, results, selected_index, sort_mode, total_duration, .. }, StateEvent::SetFilter(new_filter)) => {
+        (
             AppState::ViewingResults {
-                config: config.clone(),
-                results: results.clone(),
-                selected_index: *selected_index,
-                sort_mode: *sort_mode,
-                filter: new_filter,
-                total_duration: *total_duration,
-            }
-        }
+                config,
+                results,
+                selected_index,
+                sort_mode,
+                total_duration,
+                ..
+            },
+            StateEvent::SetFilter(new_filter),
+        ) => AppState::ViewingResults {
+            config: config.clone(),
+            results: results.clone(),
+            selected_index: *selected_index,
+            sort_mode: *sort_mode,
+            filter: new_filter,
+            total_duration: *total_duration,
+        },
 
         // Scrolling within ViewingFileDetail
-        (AppState::ViewingFileDetail { config, file_result, scroll_position, previous_results, .. }, StateEvent::ScrollDown) => {
+        (
             AppState::ViewingFileDetail {
-                config: config.clone(),
-                file_result: file_result.clone(),
-                scroll_position: scroll_position.saturating_add(1),
-                previous_results: previous_results.clone(),
-            }
-        }
+                config,
+                file_result,
+                scroll_position,
+                previous_results,
+                ..
+            },
+            StateEvent::ScrollDown,
+        ) => AppState::ViewingFileDetail {
+            config: config.clone(),
+            file_result: file_result.clone(),
+            scroll_position: scroll_position.saturating_add(1),
+            previous_results: previous_results.clone(),
+        },
 
-        (AppState::ViewingFileDetail { config, file_result, scroll_position, previous_results, .. }, StateEvent::ScrollUp) => {
+        (
             AppState::ViewingFileDetail {
-                config: config.clone(),
-                file_result: file_result.clone(),
-                scroll_position: scroll_position.saturating_sub(1),
-                previous_results: previous_results.clone(),
-            }
-        }
+                config,
+                file_result,
+                scroll_position,
+                previous_results,
+                ..
+            },
+            StateEvent::ScrollUp,
+        ) => AppState::ViewingFileDetail {
+            config: config.clone(),
+            file_result: file_result.clone(),
+            scroll_position: scroll_position.saturating_sub(1),
+            previous_results: previous_results.clone(),
+        },
 
         // Go back transitions
-        (AppState::ViewingFileDetail { previous_results, .. }, StateEvent::GoBack) => {
+        (
+            AppState::ViewingFileDetail {
+                previous_results, ..
+            },
+            StateEvent::GoBack,
+        ) => {
             // Return to the stored ViewingResults state
             *previous_results.clone()
         }
 
-        (AppState::ViewingResults { config, .. }, StateEvent::GoBack) => {
-            AppState::Configuring {
-                config: config.clone(),
-                validation_errors: vec![],
-                walk_result: None,
-            }
-        }
+        (AppState::ViewingResults { config, .. }, StateEvent::GoBack) => AppState::Configuring {
+            config: config.clone(),
+            validation_errors: vec![],
+            walk_result: None,
+            autocomplete_available: false,
+            autocomplete_suggestion: None,
+        },
 
         // Reanalyze from results view
-        (AppState::ViewingResults { config, .. }, StateEvent::Reanalyze) => {
-            AppState::Analyzing {
-                config: config.clone(),
-                path: config.search_path.clone(),
-                query: config.query.clone(),
-                files_processed: 0,
-                total_files: 0,
-            }
-        }
+        (AppState::ViewingResults { config, .. }, StateEvent::Reanalyze) => AppState::Analyzing {
+            config: config.clone(),
+            path: config.search_path.clone(),
+            query: config.query.clone(),
+            files_processed: 0,
+            total_files: 0,
+        },
 
         // Open file location in Explorer (ViewingResults)
-        (AppState::ViewingResults { results, selected_index, .. }, StateEvent::OpenFileLocation) => {
+        (
+            AppState::ViewingResults {
+                results,
+                selected_index,
+                ..
+            },
+            StateEvent::OpenFileLocation,
+        ) => {
             if let Some(file_result) = results.get(*selected_index) {
                 open_file_location(&file_result.path);
             }

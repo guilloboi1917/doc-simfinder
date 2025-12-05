@@ -11,6 +11,8 @@ fn test_configuring_to_analyzing() {
         config: Config::default(),
         validation_errors: vec![],
         walk_result: None,
+        autocomplete_available: false,
+        autocomplete_suggestion: None,
     };
 
     let result = transition(&mut state, StateEvent::StartAnalysis);
@@ -28,6 +30,8 @@ fn test_quit_from_any_state() {
         config: Config::default(),
         validation_errors: vec![],
         walk_result: None,
+        autocomplete_available: false,
+        autocomplete_suggestion: None,
     };
 
     let result = transition(&mut state, StateEvent::Quit);

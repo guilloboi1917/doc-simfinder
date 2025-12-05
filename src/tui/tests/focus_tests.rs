@@ -12,6 +12,8 @@ fn test_focus_manager_creation() {
         config: Config::default(),
         validation_errors: vec![],
         walk_result: None,
+        autocomplete_available: false,
+        autocomplete_suggestion: None,
     };
     let fm = FocusManager::new_for_state(&state);
     assert_eq!(fm.current(), Focus::PathInput);
@@ -23,6 +25,8 @@ fn test_focus_navigation() {
         config: Config::default(),
         validation_errors: vec![],
         walk_result: None,
+        autocomplete_available: false,
+        autocomplete_suggestion: None,
     };
     let mut fm = FocusManager::new_for_state(&state);
 
@@ -34,11 +38,13 @@ fn test_focus_navigation() {
 }
 
 #[test]
-fn test_focus_wrapping() {
+fn test_focus_movement() {
     let state = AppState::Configuring {
         config: Config::default(),
         validation_errors: vec![],
         walk_result: None,
+        autocomplete_available: false,
+        autocomplete_suggestion: None,
     };
     let mut fm = FocusManager::new_for_state(&state);
 

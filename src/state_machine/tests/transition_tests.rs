@@ -10,6 +10,7 @@ fn test_configuring_to_analyzing() {
     let mut state = AppState::Configuring {
         config: Config::default(),
         validation_errors: vec![],
+        walk_result: None,
     };
 
     let result = transition(&mut state, StateEvent::StartAnalysis);
@@ -26,6 +27,7 @@ fn test_quit_from_any_state() {
     let mut state = AppState::Configuring {
         config: Config::default(),
         validation_errors: vec![],
+        walk_result: None,
     };
 
     let result = transition(&mut state, StateEvent::Quit);

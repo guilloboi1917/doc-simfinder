@@ -13,6 +13,7 @@ fn test_configuring_handler() {
     let state = AppState::Configuring {
         config: Config::default(),
         validation_errors: vec![],
+        walk_result: None,
     };
 
     let events = handler.handle_key(

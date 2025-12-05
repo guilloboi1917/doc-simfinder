@@ -3,6 +3,7 @@ use globset::{Glob, GlobSetBuilder};
 use std::{fmt, path::PathBuf};
 use jwalk::WalkDir;
 
+#[derive(Debug, Clone)]
 pub struct WalkResult {
     pub files: Vec<PathBuf>,
     pub max_depth: usize,
@@ -47,7 +48,6 @@ pub fn walk_from_root(config: &Config) -> Result<WalkResult, WalkError> {
     let glob_set = glob_builder.build()?;
 
     // Use jwalk for parallel directory traversal (much faster for large trees)
-    // Parallelism is set to number of CPU cores
     for entry in WalkDir::new(&config.search_path)
         .max_depth(config.max_search_depth)
         .into_iter()

@@ -62,7 +62,7 @@ impl Default for Config {
             output_file: None,
             query: Default::default(),
             algorithm: SimilarityAlgorithm::Fuzzy,
-            threshold: 0.5_f64,
+            threshold: 0.75_f64,
             window_size: 500,
             max_window_size: 5000,
             top_n: 5,

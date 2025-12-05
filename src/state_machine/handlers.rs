@@ -84,7 +84,14 @@ impl InputHandler for ResultsHandler {
                         events.push(StateEvent::SelectFile(results.len() - 1));
                     }
                 }
-
+                KeyCode::PageUp => {
+                    let new_index = selected_index.saturating_sub(10);
+                    events.push(StateEvent::SelectFile(new_index));
+                }
+                KeyCode::PageDown => {
+                    let new_index = (*selected_index + 10).min(results.len().saturating_sub(1));
+                    events.push(StateEvent::SelectFile(new_index));
+                }
                 // Open file detail
                 KeyCode::Enter => {
                     events.push(StateEvent::OpenSelectedFile);
@@ -93,9 +100,6 @@ impl InputHandler for ResultsHandler {
                 // Actions
                 KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     events.push(StateEvent::Reanalyze);
-                }
-                KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    events.push(StateEvent::SaveResults);
                 }
                 KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     events.push(StateEvent::OpenFileLocation);

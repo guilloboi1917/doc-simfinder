@@ -1,4 +1,4 @@
-// Unit tests for TUI Layout
+﻿// Unit tests for TUI Layout
 //
 // Moved from inline tests in src/tui/layout.rs for better organization
 
@@ -13,6 +13,7 @@ fn test_layout_creation() {
     let state = AppState::Configuring {
         config,
         validation_errors: vec![],
+        walk_result: None,
     };
 
     let layout = LayoutConfig::for_state(&state);

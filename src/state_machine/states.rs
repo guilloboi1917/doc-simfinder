@@ -4,8 +4,9 @@
 
 use std::path::PathBuf;
 
-use crate::config::Config;
 use crate::analysis::FileScore;
+use crate::config::Config;
+use crate::file_walker::WalkResult;
 
 /// Main application state enum
 #[derive(Debug, Clone)]
@@ -14,6 +15,7 @@ pub enum AppState {
     Configuring {
         config: Config,
         validation_errors: Vec<String>,
+        walk_result: Option<WalkResult>,
     },
 
     /// Analysis in progress state
@@ -89,11 +91,20 @@ pub enum StateEvent {
     UpdatePath(PathBuf),
     UpdateQuery(String),
     ValidateConfig,
+    FileWalkComplete {
+        walk_result: WalkResult,
+    },
     StartAnalysis,
 
     // Analysis events
-    AnalysisProgress { files_done: usize, total: usize },
-    AnalysisComplete { results: Vec<FileScore>, elapsed: std::time::Duration },
+    AnalysisProgress {
+        files_done: usize,
+        total: usize,
+    },
+    AnalysisComplete {
+        results: Vec<FileScore>,
+        elapsed: std::time::Duration,
+    },
     AnalysisError(String),
 
     // Navigation events
@@ -108,8 +119,6 @@ pub enum StateEvent {
     ScrollDown,
 
     // Action events
-    SaveResults,
-    ExportResults(PathBuf),
     Reanalyze,
     OpenFileLocation,
 

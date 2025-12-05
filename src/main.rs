@@ -75,6 +75,7 @@ async fn run_tui_mode(args: &CliArgs) -> Result<(), Box<dyn std::error::Error>> 
     let initial_state = AppState::Configuring {
         config,
         validation_errors: vec![],
+        walk_result: None,
     };
     
     // Setup terminal

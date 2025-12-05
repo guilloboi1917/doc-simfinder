@@ -34,7 +34,7 @@ pub struct CliArgs {
     pub algorithm: Algorithm,
 
     /// Threshold
-    #[arg(long, short, default_value_t = 0.5_f64)]
+    #[arg(long, short, default_value_t = 0.75_f64)]
     pub threshold: f64,
 }
 

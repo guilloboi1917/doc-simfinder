@@ -3,38 +3,42 @@
 // See docs/copilot/ui.md for widget patterns
 
 use ratatui::{
-    layout::Rect,
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
     Frame,
+    layout::{Position, Rect},
+    style::{Color, Modifier, Style, Stylize},
+    text::{Line, Span},
+    widgets::{Block, BorderType, Borders, List, ListItem, Padding, Paragraph},
 };
 
+use super::focus::{Focus, FocusManager};
+use super::layout::{LayoutConfig, results_two_column, right_panel_split};
 use crate::analysis::FileScore;
 use crate::state_machine::AppState;
-use super::focus::{Focus, FocusManager};
-use super::layout::{LayoutConfig, right_panel_split, results_two_column};
 
 /// Helper to build highlighted text lines with matched character indices.
 /// Returns a vector of Lines with proper highlighting and text wrapping.
 /// Matched characters are styled with yellow, bold, and underline.
-fn build_highlighted_lines(text: &str, indices: &Option<Vec<usize>>, max_width: usize) -> Vec<Line<'static>> {
+fn build_highlighted_lines(
+    text: &str,
+    indices: &Option<Vec<usize>>,
+    max_width: usize,
+) -> Vec<Line<'static>> {
     // First, wrap the text to prevent overflow
     let wrapped = textwrap::wrap(text, max_width.saturating_sub(2)); // -2 for padding
-    
+
     let mut result_lines = Vec::new();
     let mut char_offset = 0;
-    
+
     for wrapped_line in wrapped {
         let line_text = wrapped_line.to_string();
-        
+
         // Build spans for this line with highlighting
         let spans = match indices {
             Some(idx_vec) if !idx_vec.is_empty() => {
                 let mut spans = Vec::new();
                 let mut current_text = String::new();
                 let mut is_highlighted = false;
-                
+
                 // Find the actual position in original text for each character in wrapped line
                 for ch in line_text.chars() {
                     // Find this character at or after char_offset in the original text
@@ -45,10 +49,10 @@ fn build_highlighted_lines(text: &str, indices: &Option<Vec<usize>>, max_width: 
                             break;
                         }
                     }
-                    
+
                     let global_i = found_at.unwrap_or(char_offset);
                     let should_highlight = idx_vec.contains(&global_i);
-                    
+
                     if should_highlight != is_highlighted {
                         // Flush current span if it has content
                         if !current_text.is_empty() {
@@ -67,15 +71,15 @@ fn build_highlighted_lines(text: &str, indices: &Option<Vec<usize>>, max_width: 
                         }
                         is_highlighted = should_highlight;
                     }
-                    
+
                     current_text.push(ch);
-                    
+
                     // Move char_offset forward by the number of bytes this char takes
                     if let Some(idx) = found_at {
                         char_offset = idx + ch.len_utf8();
                     }
                 }
-                
+
                 // Flush remaining text
                 if !current_text.is_empty() {
                     let span = if is_highlighted {
@@ -90,7 +94,7 @@ fn build_highlighted_lines(text: &str, indices: &Option<Vec<usize>>, max_width: 
                     };
                     spans.push(span);
                 }
-                
+
                 spans
             }
             _ => {
@@ -98,9 +102,9 @@ fn build_highlighted_lines(text: &str, indices: &Option<Vec<usize>>, max_width: 
                 vec![Span::raw(line_text.clone())]
             }
         };
-        
+
         result_lines.push(Line::from(spans));
-        
+
         // Skip any whitespace between lines in the original text
         while char_offset < text.len() {
             if let Some(ch) = text[char_offset..].chars().next() {
@@ -114,11 +118,11 @@ fn build_highlighted_lines(text: &str, indices: &Option<Vec<usize>>, max_width: 
             }
         }
     }
-    
+
     if result_lines.is_empty() {
         result_lines.push(Line::from(text.to_string()));
     }
-    
+
     result_lines
 }
 
@@ -136,23 +140,14 @@ impl Dashboard {
     }
 
     /// Render the dashboard
-    pub fn render(
-        &self,
-        frame: &mut Frame,
-        state: &AppState,
-        focus: &FocusManager,
-    ) {
+    pub fn render(&self, frame: &mut Frame, state: &AppState, focus: &FocusManager) {
         match state {
             AppState::Configuring {
                 config,
                 validation_errors,
+                walk_result,
             } => {
-                self.render_configuring(
-                    frame,
-                    config,
-                    validation_errors,
-                    focus,
-                );
+                self.render_configuring(frame, config, validation_errors, walk_result, focus);
             }
             AppState::ViewingResults {
                 results,
@@ -162,10 +157,19 @@ impl Dashboard {
             } => {
                 self.render_results(frame, results, *selected_index, focus, *total_duration);
             }
-            AppState::ViewingFileDetail { file_result, scroll_position, .. } => {
+            AppState::ViewingFileDetail {
+                file_result,
+                scroll_position,
+                ..
+            } => {
                 self.render_file_detail(frame, file_result, *scroll_position, focus);
             }
-            AppState::Analyzing { files_processed, total_files, query, .. } => {
+            AppState::Analyzing {
+                files_processed,
+                total_files,
+                query,
+                ..
+            } => {
                 self.render_analyzing(frame, *files_processed, *total_files, query);
             }
             AppState::Error { message, .. } => {
@@ -182,6 +186,7 @@ impl Dashboard {
         frame: &mut Frame,
         config: &crate::config::Config,
         validation_errors: &[String],
+        walk_result: &Option<crate::file_walker::WalkResult>,
         focus: &FocusManager,
     ) {
         let chunks = self.layout.split(frame.area());
@@ -190,16 +195,28 @@ impl Dashboard {
         if let Some(&area) = chunks.get(0) {
             let is_focused = focus.is_focused(Focus::PathInput);
             let path_widget = Paragraph::new(config.search_path.to_string_lossy().to_string())
+                .style(if config.search_path.exists() {
+                    Style::default().fg(Color::Green)
+                } else {
+                    Style::default().fg(Color::Red)
+                })
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
-                        .title("Search Path (editable)")
-                        .border_style(if is_focused {
-                            Style::default().fg(Color::Yellow)
+                        .title(" Search Path (editable) ")
+                        .border_type(if is_focused {
+                            BorderType::Double
                         } else {
-                            Style::default()
+                            BorderType::Plain
                         }),
                 );
+            if is_focused {
+                frame.set_cursor_position(Position::new(
+                    area.x + config.search_path.to_string_lossy().len() as u16 + 1,
+                    area.y + 1,
+                ));
+            }
+
             frame.render_widget(path_widget, area);
         }
 
@@ -207,84 +224,153 @@ impl Dashboard {
         if let Some(&area) = chunks.get(1) {
             let is_focused = focus.is_focused(Focus::QueryInput);
             let query_widget = Paragraph::new(config.query.as_str())
+                .style(if !config.query.is_empty() {
+                    Style::default().fg(Color::Green)
+                } else {
+                    Style::default().fg(Color::Red)
+                })
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
-                        .title("Query (editable)")
-                        .border_style(if is_focused {
-                            Style::default().fg(Color::Yellow)
+                        .title(" Query (editable) ")
+                        .border_type(if is_focused {
+                            BorderType::Double
                         } else {
-                            Style::default()
+                            BorderType::Plain
                         }),
                 );
+            if is_focused {
+                frame.set_cursor_position(Position::new(
+                    area.x + config.query.len() as u16 + 1,
+                    area.y + 1,
+                ));
+            }
             frame.render_widget(query_widget, area);
         }
 
-        // Options panel (read-only display) or validation errors
+        // File list - show found files from walk_result
         if let Some(&area) = chunks.get(2) {
+            let is_focused = focus.is_focused(Focus::FileList);
+
+            if let Some(walk_result) = walk_result {
+                // Display list of found files
+                let items: Vec<ListItem> = walk_result
+                    .files
+                    .iter()
+                    .map(|path| {
+                        // Normalize path separators for consistency
+                        let normalized = path.display().to_string().replace('\\', "/");
+                        ListItem::new(normalized)
+                    })
+                    .collect();
+
+                let title = format!(" Found Files ({}) ", walk_result.files.len());
+                let file_list = List::new(items).block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(title)
+                        .border_type(if is_focused {
+                            BorderType::Double
+                        } else {
+                            BorderType::Plain
+                        }),
+                );
+                frame.render_widget(file_list, area);
+            } else {
+                // Show placeholder when no walk result yet
+                let placeholder = Paragraph::new("Searching for files...")
+                    .style(Style::default().fg(Color::DarkGray))
+                    .block(
+                        Block::default()
+                            .borders(Borders::ALL)
+                            .title(" Found Files ")
+                            .border_type(if is_focused {
+                                BorderType::Double
+                            } else {
+                                BorderType::Plain
+                            }),
+                    );
+                frame.render_widget(placeholder, area);
+            }
+        }
+
+        // Options panel (read-only display) or validation errors
+        if let Some(&area) = chunks.get(3) {
             let is_focused = focus.is_focused(Focus::OptionsPanel);
-            
+
             // Show validation errors OR options
             if !validation_errors.is_empty() {
                 let error_lines: Vec<Line> = validation_errors
                     .iter()
                     .map(|e| Line::from(Span::styled(e.clone(), Style::default().fg(Color::Red))))
                     .collect();
-                let error_widget = Paragraph::new(error_lines)
-                    .block(
-                        Block::default()
-                            .borders(Borders::ALL)
-                            .title("Validation Errors")
-                            .border_style(Style::default().fg(Color::Red))
-                    );
+                let error_widget = Paragraph::new(error_lines).block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(" Validation Errors ")
+                        .border_style(Style::default().fg(Color::Red)),
+                );
                 frame.render_widget(error_widget, area);
             } else {
                 let options_text = format!(
-                    "Window Size: {}\nMax Window: {}\nThreshold: {:.2}\nTop N: {}\nThreads: {}",
+                    "- Window Size: {:<15}\n- Max Window: {:<15}\n- Threshold: {:<15.2}\n- Top N: {:<15}\n- Threads: {:<15}",
                     config.window_size,
                     config.max_window_size,
                     config.threshold,
                     config.top_n,
                     config.num_threads
                 );
-                let options_widget = Paragraph::new(options_text)
-                    .block(
-                        Block::default()
-                            .borders(Borders::ALL)
-                            .title("Options (Read-Only)")
-                            .border_style(if is_focused {
-                                Style::default().fg(Color::Yellow)
-                            } else {
-                                Style::default()
-                            }),
-                    );
+                let options_widget = Paragraph::new(options_text).block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(" Options (Read-Only) ")
+                        .padding(Padding::horizontal(1))
+                        .border_type(if is_focused {
+                            BorderType::Double
+                        } else {
+                            BorderType::Plain
+                        }),
+                );
                 frame.render_widget(options_widget, area);
             }
         }
 
         // Start button
-        if let Some(&area) = chunks.get(3) {
+        if let Some(&area) = chunks.get(4) {
             let is_focused = focus.is_focused(Focus::StartButton);
-            let can_start = !config.query.is_empty() && config.search_path.exists();
-            
+            let can_start = !config.query.is_empty()
+                && config.search_path.exists()
+                && walk_result.is_some()
+                && walk_result
+                    .as_ref()
+                    .map(|wr| !wr.files.is_empty())
+                    .unwrap_or(false);
+
             let (button_text, button_style) = if can_start {
-                ("✓ Press Enter to Start Analysis", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
+                (
+                    "✓ Ready to Start Analysis",
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                )
             } else {
-                ("⚠ Configure query and valid path first", Style::default().fg(Color::DarkGray))
+                (
+                    "⚠ Configure query and valid path first",
+                    Style::default().fg(Color::DarkGray),
+                )
             };
-            
-            let start_widget = Paragraph::new(button_text)
-                .style(button_style)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .title("Start")
-                        .border_style(if is_focused {
-                            Style::default().fg(Color::Yellow)
-                        } else {
-                            Style::default()
-                        }),
-                );
+
+            let start_widget = Paragraph::new(button_text).style(button_style).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Start ")
+                    .border_type(if is_focused {
+                        BorderType::Double
+                    } else {
+                        BorderType::Plain
+                    })
+                    .title_bottom(Line::from(" <Enter> to Start Analysis ").centered()),
+            );
             frame.render_widget(start_widget, area);
         }
     }
@@ -330,18 +416,22 @@ impl Dashboard {
                         Style::default().fg(Color::Yellow)
                     } else {
                         Style::default()
-                    }),
+                    })
+                    .title_bottom(
+                        Line::from(" <↑↓> | <jk> to navigate, <Enter> to view file details ")
+                            .centered(),
+                    ),
             )
             .highlight_style(
                 Style::default()
                     .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD)
+                    .add_modifier(Modifier::BOLD),
             );
-        
+
         // Create stateful list with selection to enable scrolling
         let mut list_state = ratatui::widgets::ListState::default();
         list_state.select(Some(selected_index));
-        
+
         frame.render_stateful_widget(file_list, left, &mut list_state);
 
         // Right panel (preview, stats, actions)
@@ -385,7 +475,9 @@ impl Dashboard {
                 Span::raw("  "),
                 Span::styled(
                     format!("{}.", i + 1),
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::raw(" score: "),
                 Span::styled(
@@ -409,33 +501,43 @@ impl Dashboard {
             // Context text with character-level highlighting and proper wrapping
             // Calculate available width (subtract borders and padding)
             let available_width = area.width.saturating_sub(4).max(40) as usize;
-            let context_lines = build_highlighted_lines(&chunk.chunk.text, &chunk.indices, available_width);
-            for ctx_line in context_lines.iter().take(3) { // Limit lines in preview
+            let context_lines =
+                build_highlighted_lines(&chunk.chunk.text, &chunk.indices, available_width);
+            for ctx_line in context_lines.iter().take(3) {
+                // Limit lines in preview
                 lines.push(ctx_line.clone());
             }
             if context_lines.len() > 3 {
-                lines.push(Line::from(Span::styled("...", Style::default().fg(Color::DarkGray))));
+                lines.push(Line::from(Span::styled(
+                    "...",
+                    Style::default().fg(Color::DarkGray),
+                )));
             }
             lines.push(Line::from(""));
         }
 
-        let preview = Paragraph::new(lines)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title("Preview")
-                    .border_style(if is_focused {
-                        Style::default().fg(Color::Yellow)
-                    } else {
-                        Style::default()
-                    }),
-            );
+        let preview = Paragraph::new(lines).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Preview")
+                .border_style(if is_focused {
+                    Style::default().fg(Color::Yellow)
+                } else {
+                    Style::default()
+                }),
+        );
         frame.render_widget(preview, area);
     }
 
-    fn render_stats(&self, frame: &mut Frame, results: &[FileScore], area: Rect, total_duration: Option<std::time::Duration>) {
+    fn render_stats(
+        &self,
+        frame: &mut Frame,
+        results: &[FileScore],
+        area: Rect,
+        total_duration: Option<std::time::Duration>,
+    ) {
         let matched = results.iter().filter(|r| r.score > 0.0).count();
-        
+
         let duration_text = if let Some(duration) = total_duration {
             format!("{:.2}s", duration.as_secs_f64())
         } else {
@@ -448,8 +550,8 @@ impl Dashboard {
             Line::from(format!("Duration: {}", duration_text)),
         ];
 
-        let stats = Paragraph::new(lines)
-            .block(Block::default().borders(Borders::ALL).title("Statistics"));
+        let stats =
+            Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title("Statistics"));
         frame.render_widget(stats, area);
     }
 
@@ -457,13 +559,12 @@ impl Dashboard {
         let lines = vec![
             Line::from("Ctrl+O: Open Location"),
             Line::from("Ctrl+R: Reanalyze"),
-            Line::from("Ctrl+S: Save"),
             Line::from("Esc: Back"),
             Line::from("Ctrl+Q: Quit"),
         ];
 
-        let actions = Paragraph::new(lines)
-            .block(Block::default().borders(Borders::ALL).title("Actions"));
+        let actions =
+            Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title("Actions"));
         frame.render_widget(actions, area);
     }
 
@@ -477,18 +578,20 @@ impl Dashboard {
         let chunks = self.layout.split(frame.area());
 
         if let Some(&area) = chunks.get(0) {
-            let mut lines = vec![
-                Line::from(Span::styled(
-                    format!("File: {}", file_result.path.display()),
-                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-                )),
-            ];
+            let mut lines = vec![Line::from(Span::styled(
+                format!("File: {}", file_result.path.display()),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ))];
 
             // Analysis duration
             if let Some(duration) = file_result.analysis_duration {
                 lines.push(Line::from(Span::styled(
                     format!("Analysis duration: {:?}", duration),
-                    Style::default().fg(Color::Red).add_modifier(Modifier::ITALIC),
+                    Style::default()
+                        .fg(Color::Red)
+                        .add_modifier(Modifier::ITALIC),
                 )));
             } else {
                 lines.push(Line::from(Span::styled(
@@ -499,7 +602,9 @@ impl Dashboard {
 
             // Score with conditional coloring
             let score_style = if file_result.score > 0.0 {
-                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::DarkGray)
             };
@@ -536,7 +641,9 @@ impl Dashboard {
                         Span::raw("  "),
                         Span::styled(
                             format!("{}.", i + 1),
-                            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                            Style::default()
+                                .fg(Color::Yellow)
+                                .add_modifier(Modifier::BOLD),
                         ),
                         Span::raw(" score: "),
                         Span::styled(
@@ -560,7 +667,8 @@ impl Dashboard {
                     // Full chunk text with character-level highlighting and proper wrapping
                     // Calculate available width (subtract borders and padding: 2 borders + 2 horizontal padding)
                     let available_width = area.width.saturating_sub(4).max(40) as usize;
-                    let context_lines = build_highlighted_lines(&chunk.chunk.text, &chunk.indices, available_width);
+                    let context_lines =
+                        build_highlighted_lines(&chunk.chunk.text, &chunk.indices, available_width);
                     for ctx_line in context_lines {
                         lines.push(ctx_line);
                     }
@@ -572,7 +680,11 @@ impl Dashboard {
                     Block::default()
                         .borders(Borders::ALL)
                         .title("File Detail")
-                        .padding(ratatui::widgets::Padding::horizontal(1))  // Add 1 char padding on left/right
+                        .padding(ratatui::widgets::Padding::horizontal(1))
+                        .title_bottom(
+                            Line::from(" <↑↓> | <jk> to navigate, <Esc> to return to overview ")
+                                .centered(),
+                        ), // Add 1 char padding on left/right
                 )
                 .scroll((scroll_position as u16, 0));
             frame.render_widget(content, area);
@@ -599,8 +711,11 @@ impl Dashboard {
             format!("Discovering files...\nQuery: {}", query)
         };
 
-        let widget = Paragraph::new(progress_text)
-            .block(Block::default().borders(Borders::ALL).title("Analysis in Progress"));
+        let widget = Paragraph::new(progress_text).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Analysis in Progress"),
+        );
         frame.render_widget(widget, area);
     }
 
@@ -628,8 +743,9 @@ mod tests {
         let state = AppState::Configuring {
             config,
             validation_errors: vec![],
+            walk_result: None,
         };
-        let dashboard = Dashboard::new_for_state(&state);
+        let _dashboard = Dashboard::new_for_state(&state);
         // Test that dashboard was created
     }
 }

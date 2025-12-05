@@ -45,7 +45,8 @@ impl LayoutConfig {
             main_constraints: vec![
                 Constraint::Length(3),  // Path input
                 Constraint::Length(3),  // Query input
-                Constraint::Min(5),     // Options
+                Constraint::Min(8),    // Found files
+                Constraint::Length(7),  // Options
                 Constraint::Length(3),  // Start button
             ],
         }

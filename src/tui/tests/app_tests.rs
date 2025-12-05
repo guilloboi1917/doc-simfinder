@@ -1,4 +1,4 @@
-// Unit tests for TUI App
+﻿// Unit tests for TUI App
 //
 // Moved from inline tests in src/tui/app.rs for better organization
 
@@ -12,32 +12,36 @@ fn test_app_creation() {
     let initial_state = AppState::Configuring {
         config: Config::default(),
         validation_errors: vec![],
+        walk_result: None,
     };
     let app = App::new(initial_state);
     assert!(!app.should_quit);
 }
 
-#[test]
-fn test_quit_handling() {
+#[tokio::test]
+async fn test_quit_handling() {
     let initial_state = AppState::Configuring {
         config: Config::default(),
         validation_errors: vec![],
+        walk_result: None,
     };
     let mut app = App::new(initial_state);
 
-    // Simulate quit key
-    let quit_key = KeyEvent::from(KeyCode::Char('q'));
+    // Simulate Ctrl+Q quit key (use modifiers)
+    let mut quit_key = KeyEvent::from(KeyCode::Char('q'));
+    quit_key.modifiers = crossterm::event::KeyModifiers::CONTROL;
     app.handle_key(quit_key);
 
     // Should trigger quit
     assert!(app.should_quit || matches!(app.current_state(), AppState::Exiting));
 }
 
-#[test]
-fn test_character_input_no_duplication() {
+#[tokio::test]
+async fn test_character_input_no_duplication() {
     let initial_state = AppState::Configuring {
         config: Config::default(),
         validation_errors: vec![],
+        walk_result: None,
     };
     let mut app = App::new(initial_state);
 
@@ -61,6 +65,7 @@ fn test_query_input() {
     let initial_state = AppState::Configuring {
         config: Config::default(),
         validation_errors: vec![],
+        walk_result: None,
     };
     let mut app = App::new(initial_state);
 
@@ -82,11 +87,12 @@ fn test_query_input() {
     }
 }
 
-#[test]
-fn test_backspace_in_input() {
+#[tokio::test]
+async fn test_backspace_in_input() {
     let initial_state = AppState::Configuring {
         config: Config::default(),
         validation_errors: vec![],
+        walk_result: None,
     };
     let mut app = App::new(initial_state);
 
@@ -107,11 +113,12 @@ fn test_backspace_in_input() {
     }
 }
 
-#[test]
-fn test_key_release_events_ignored() {
+#[tokio::test]
+async fn test_key_release_events_ignored() {
     let initial_state = AppState::Configuring {
         config: Config::default(),
         validation_errors: vec![],
+        walk_result: None,
     };
     let mut app = App::new(initial_state);
 

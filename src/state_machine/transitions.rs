@@ -28,19 +28,35 @@ pub enum TransitionResult {
 /// Main transition function that handles state changes based on events
 pub fn transition(current_state: &mut AppState, event: StateEvent) -> TransitionResult {
     let new_state = match (&*current_state, event) {
+        // Handle file walk completion in Configuring state
+        (AppState::Configuring { config, validation_errors, .. }, StateEvent::FileWalkComplete { walk_result }) => {
+            AppState::Configuring {
+                config: config.clone(),
+                validation_errors: validation_errors.clone(),
+                walk_result: Some(walk_result),
+            }
+        }
+
         // Configuration -> Analyzing
-        (AppState::Configuring { config, .. }, StateEvent::StartAnalysis) => {
+        (AppState::Configuring { config, walk_result, .. }, StateEvent::StartAnalysis) => {
             // Validate config before transitioning
             if let Err(_) = config.validate() {
                 return TransitionResult::Error("Invalid configuration".into());
             }
+
+            // Ensure we have walk results before starting analysis
+            if walk_result.is_none() {
+                return TransitionResult::Error("No files found - path may be invalid".into());
+            }
+
+            let walk_result = walk_result.as_ref().unwrap();
 
             AppState::Analyzing {
                 config: config.clone(),
                 path: config.search_path.clone(),
                 query: config.query.clone(),
                 files_processed: 0,
-                total_files: 0,
+                total_files: walk_result.files.len(),
             }
         }
 
@@ -196,6 +212,7 @@ pub fn transition(current_state: &mut AppState, event: StateEvent) -> Transition
             AppState::Configuring {
                 config: config.clone(),
                 validation_errors: vec![],
+                walk_result: None,
             }
         }
 

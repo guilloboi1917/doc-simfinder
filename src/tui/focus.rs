@@ -49,6 +49,7 @@ impl FocusManager {
             AppState::Configuring { .. } => vec![
                 Focus::PathInput,
                 Focus::QueryInput,
+                Focus::FileList,
                 Focus::OptionsPanel,
                 Focus::StartButton,
             ],

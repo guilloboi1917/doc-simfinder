@@ -2,24 +2,26 @@
 //
 // See docs/copilot/tui-integration.md for application architecture
 
-use std::io;
 use crossterm::event::{self, Event, KeyCode};
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{Terminal, backend::CrosstermBackend};
+use std::io;
 use tokio::sync::mpsc;
 
-use crate::state_machine::{StateMachine, AppState, StateEvent};
-use crate::{analysis, file_walker};
-use super::{Dashboard, FocusManager, focus::FocusDirection};
 use super::super::state_machine::handlers::get_handler_for_state;
+use super::{Dashboard, FocusManager, focus::FocusDirection};
+use crate::state_machine::{AppState, StateEvent, StateMachine};
+use crate::{analysis, file_walker};
 
 /// Main TUI application
 pub struct App {
     state_machine: StateMachine,
     pub(crate) focus_manager: FocusManager,
     pub(crate) should_quit: bool,
-    needs_clear: bool,  // Track if terminal needs clearing on next render
+    needs_clear: bool, // Track if terminal needs clearing on next render
     analysis_event_rx: mpsc::UnboundedReceiver<StateEvent>,
     analysis_event_tx: mpsc::UnboundedSender<StateEvent>,
+    walker_event_rx: mpsc::UnboundedReceiver<StateEvent>,
+    walker_event_tx: mpsc::UnboundedSender<StateEvent>,
 }
 
 impl App {
@@ -27,15 +29,20 @@ impl App {
     pub fn new(initial_state: AppState) -> Self {
         let focus_manager = FocusManager::new_for_state(&initial_state);
         let state_machine = StateMachine::new(initial_state);
-        let (tx, rx) = mpsc::unbounded_channel();
+        // Channel for receiving analysis events from background task
+        let (tx_analysis, rx_analysis) = mpsc::unbounded_channel();
+        // Channel for receiving walker events from background task
+        let (tx_walker, rx_walker) = mpsc::unbounded_channel();
 
         Self {
             state_machine,
             focus_manager,
             should_quit: false,
             needs_clear: false,
-            analysis_event_rx: rx,
-            analysis_event_tx: tx,
+            analysis_event_rx: rx_analysis,
+            analysis_event_tx: tx_analysis,
+            walker_event_rx: rx_walker,
+            walker_event_tx: tx_walker,
         }
     }
 
@@ -63,12 +70,23 @@ impl App {
                 );
             })?;
 
+            // Check for walker events from background task
+            while let Ok(event) = self.walker_event_rx.try_recv() {
+                let result = self.state_machine.process_event(event);
+                if matches!(result, crate::state_machine::TransitionResult::Changed) {
+                    self.needs_clear = true;
+                    self.focus_manager =
+                        FocusManager::new_for_state(self.state_machine.current_state());
+                }
+            }
+
             // Check for analysis events from background task
             while let Ok(event) = self.analysis_event_rx.try_recv() {
                 let result = self.state_machine.process_event(event);
                 if matches!(result, crate::state_machine::TransitionResult::Changed) {
                     self.needs_clear = true;
-                    self.focus_manager = FocusManager::new_for_state(self.state_machine.current_state());
+                    self.focus_manager =
+                        FocusManager::new_for_state(self.state_machine.current_state());
                 }
             }
 
@@ -89,10 +107,14 @@ impl App {
         if key.kind != crossterm::event::KeyEventKind::Press {
             return;
         }
-        
+
         // Global shortcuts that work in any state
         match key.code {
-            KeyCode::Char('q') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+            KeyCode::Char('q') | KeyCode::Char('c')
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
                 self.should_quit = true;
                 return;
             }
@@ -124,6 +146,13 @@ impl App {
                                 let mut path_str = config.search_path.to_string_lossy().to_string();
                                 path_str.push(c);
                                 config.search_path = std::path::PathBuf::from(path_str);
+                                
+                                // Trigger file walker for new path
+                                let config_clone = config.clone();
+                                let tx_clone = self.walker_event_tx.clone();
+                                tokio::spawn(async move {
+                                    Self::run_filewalker_task(config_clone, tx_clone).await;
+                                });
                                 return;
                             }
                         }
@@ -146,6 +175,13 @@ impl App {
                                 let mut path_str = config.search_path.to_string_lossy().to_string();
                                 path_str.pop();
                                 config.search_path = std::path::PathBuf::from(path_str);
+                                
+                                // Trigger file walker for modified path
+                                let config_clone = config.clone();
+                                let tx_clone = self.walker_event_tx.clone();
+                                tokio::spawn(async move {
+                                    Self::run_filewalker_task(config_clone, tx_clone).await;
+                                });
                                 return;
                             }
                         }
@@ -172,20 +208,27 @@ impl App {
 
             // If StartAnalysis or Reanalyze event, spawn background task
             if matches!(event, StateEvent::StartAnalysis) {
-                if let AppState::Configuring { config, .. } = self.state_machine.current_state() {
-                    let config_clone = config.clone();
-                    let tx_clone = self.analysis_event_tx.clone();
-                    tokio::spawn(async move {
-                        Self::run_analysis_task(config_clone, tx_clone).await;
-                    });
+                if let AppState::Configuring { config, walk_result, .. } = self.state_machine.current_state() {
+                    // Only start analysis if we have walk results
+                    if let Some(walk_result) = walk_result {
+                        let config_clone = config.clone();
+                        let walk_result_clone = walk_result.clone();
+                        let tx_clone = self.analysis_event_tx.clone();
+                        tokio::spawn(async move {
+                            Self::run_analysis_task(config_clone, walk_result_clone, tx_clone).await;
+                        });
+                    }
                 }
             } else if matches!(event, StateEvent::Reanalyze) {
-                // Get config from current state before transitioning
+                // For reanalyze, we need to trigger a new file walk first
                 if let Some(config) = self.state_machine.current_state().config() {
                     let config_clone = config.clone();
-                    let tx_clone = self.analysis_event_tx.clone();
+                    let tx_walker = self.walker_event_tx.clone();
+                    
                     tokio::spawn(async move {
-                        Self::run_analysis_task(config_clone, tx_clone).await;
+                        // First run file walker
+                        Self::run_filewalker_task(config_clone.clone(), tx_walker).await;
+                        // Analysis will be triggered after FileWalkComplete is processed
                     });
                 }
             }
@@ -196,7 +239,8 @@ impl App {
             // Update focus manager if state changed
             if matches!(result, crate::state_machine::TransitionResult::Changed) {
                 self.needs_clear = true;
-                self.focus_manager = FocusManager::new_for_state(self.state_machine.current_state());
+                self.focus_manager =
+                    FocusManager::new_for_state(self.state_machine.current_state());
             }
         }
     }
@@ -211,45 +255,63 @@ impl App {
         self.state_machine.current_state_mut()
     }
 
+    async fn run_filewalker_task(
+        config: crate::config::Config,
+        tx: mpsc::UnboundedSender<StateEvent>,
+    ) {
+        // Perform file walking in a blocking task to avoid blocking tokio runtime
+        let walk_result =
+            tokio::task::spawn_blocking(move || file_walker::walk_from_root(&config)).await;
+
+        match walk_result {
+            Ok(Ok(result)) => {
+                // Send event with walk result
+                let _ = tx.send(StateEvent::FileWalkComplete {
+                    walk_result: result,
+                });
+            }
+            Ok(Err(e)) => {
+                let _ = tx.send(StateEvent::AnalysisError(format!(
+                    "File walk failed: {}",
+                    e
+                )));
+            }
+            Err(e) => {
+                let _ = tx.send(StateEvent::AnalysisError(format!("Task failed: {}", e)));
+            }
+        }
+    }
+
     /// Background task that performs file walking and analysis
     async fn run_analysis_task(
         config: crate::config::Config,
+        walk_result: file_walker::WalkResult,
         tx: mpsc::UnboundedSender<StateEvent>,
     ) {
         // Start tracking elapsed time
         let start_time = std::time::Instant::now();
-        
-        // First, walk the file system to find files
-        let walk_result = match file_walker::walk_from_root(&config) {
-            Ok(result) => result,
-            Err(e) => {
-                let _ = tx.send(StateEvent::AnalysisError(format!("File walk failed: {}", e)));
-                return;
-            }
-        };
-
-        let total_files = walk_result.files.len();
 
         // Send initial progress update with total file count
         let _ = tx.send(StateEvent::AnalysisProgress {
             files_done: 0,
-            total: total_files,
+            total: walk_result.files.len(),
         });
 
         // If no files found, send error
-        if total_files == 0 {
-            let _ = tx.send(StateEvent::AnalysisError(
-                format!("No files found in {} matching extensions {:?}", 
-                    config.search_path.display(), 
-                    config.file_exts)
-            ));
+        if walk_result.files.is_empty() {
+            let _ = tx.send(StateEvent::AnalysisError(format!(
+                "No files found in {} matching extensions {:?}",
+                config.search_path.display(),
+                config.file_exts
+            )));
             return;
         }
 
         // Perform analysis using blocking task to avoid blocking tokio runtime
         let analysis_result = tokio::task::spawn_blocking(move || {
             analysis::analyse_files(&walk_result.files, &config)
-        }).await;
+        })
+        .await;
 
         // Calculate elapsed time
         let elapsed = start_time.elapsed();

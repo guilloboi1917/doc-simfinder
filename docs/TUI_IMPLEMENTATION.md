@@ -1,4 +1,4 @@
-> **Note:** This README was AI-generated to document the implemented solution.
+> **Note:** This README was partially AI-generated to document the implemented solution.
 
 # TUI Feature Implementation Summary
 
@@ -7,31 +7,31 @@ This document provides a quick-start guide for understanding the new TUI (Termin
 
 ## Directory Structure
 ```
-docs/copilot/               # Comprehensive documentation
+docs/copilot/              # Comprehensive documentation and knowledge repository for copilot
 ├── core.md                # Analysis module documentation
 ├── ui.md                  # UI components and widgets
 ├── files.md               # File system operations
 ├── state-machine.md       # State machine patterns
 ├── tui-integration.md     # TUI architecture guide
 └── worklog/
-    └── 2025-12.md        # December 2025 development log
+    └── 2025-12.md         # December 2025 development log
 
 src/state_machine/         # State management
-├── mod.rs                # Public API
-├── states.rs             # AppState enum and StateEvent definitions
-├── transitions.rs        # State transition logic
-└── handlers.rs           # Input handlers per state
+├── mod.rs                 # Public API
+├── states.rs              # AppState enum and StateEvent definitions
+├── transitions.rs         # State transition logic
+└── handlers.rs            # Input handlers per state
 
 src/tui/                   # Terminal UI
-├── mod.rs                # Public API, terminal setup/restore
-├── app.rs                # Main TUI App struct
-├── layout.rs             # Layout management
-├── widgets.rs            # Widget implementations (Dashboard, etc.)
-└── focus.rs              # Focus management system
+├── mod.rs                 # Public API, terminal setup/restore
+├── app.rs                 # Main TUI App struct
+├── layout.rs              # Layout management
+├── widgets.rs             # Widget implementations (Dashboard, etc.)
+└── focus.rs               # Focus management system
 
 src/realtime/              # File system monitoring
-├── mod.rs                # Public API
-└── watcher.rs            # FileWatcher implementation
+├── mod.rs                 # Public API
+└── watcher.rs             # FileWatcher implementation
 ```
 
 ## Key Implementation Files
@@ -67,13 +67,6 @@ src/realtime/              # File system monitoring
 App::run() → Terminal::draw() → Dashboard::render() → Widgets
 ```
 
-### Real-time Monitoring
-**Location:** `src/realtime/`
-
-**Key Components:**
-- `FileWatcher` - Monitors file system for changes
-- `FileEvent` - Created/Modified/Deleted events
-
 ## Integration Points
 
 ### With Existing Code
@@ -92,13 +85,6 @@ The new TUI feature integrates cleanly with existing modules:
 
 **Config (`src/config.rs`):**
 - `Config` - Carried through all states (now with Clone)
-
-### Dependencies Added
-```toml
-ratatui = "0.29.0"      # Terminal UI framework
-tokio = "1.42"          # Async runtime (full features)
-notify = "7.0"          # File system watching
-```
 
 ## Quick Start for Developers
 
@@ -134,30 +120,6 @@ fn test_my_transition() {
     assert!(matches!(state, AppState::Analyzing { .. }));
 }
 ```
-
-## Current Status
-
-### ✅ Completed
-- Full state machine implementation with all state types
-- TUI rendering pipeline (Dashboard, widgets, layouts)
-- Focus management system
-- File system watcher
-- Documentation structure
-- All code compiles successfully
-
-### 🚧 To Be Implemented
-- Async integration for analysis (currently synchronous)
-- CLI flag `--tui` to enable TUI mode
-- Progress bar widget during analysis
-- Help overlay widget
-- Save/export functionality
-- Real-time file update integration
-- Integration tests
-
-### 🐛 Known Issues
-- None currently - all compilation errors resolved
-- Analysis blocks UI (needs tokio integration)
-- No persistence of results between sessions
 
 ## Documentation
 
@@ -218,48 +180,6 @@ cargo test --lib realtime
 cargo run -- --query "test" --search-path ./testdata
 cargo run -- --interactive
 ```
-
-## Performance Considerations
-
-### Memory Usage
-- States clone `Config` on transitions (small overhead)
-- `FileScore` results cloned when transitioning (optimize if needed)
-- Consider `Arc<>` for large result sets in future
-
-### Responsiveness
-- Analysis currently blocks (needs async)
-- File watching runs in separate thread
-- UI redraws on every input (could optimize with dirty flags)
-
-## Troubleshooting
-
-### Compilation Errors
-If you encounter missing trait implementations:
-- Add `#[derive(Debug, Clone)]` to types used in `AppState`
-- Check that field names match (e.g., `Chunk::text` not `content`)
-
-### Runtime Issues
-- Enable logging: `RUST_LOG=debug cargo run`
-- Check state transitions in debugger
-- Verify file paths are valid
-
-## Future Enhancements
-
-### Phase 2 Features
-- Async analysis with progress reporting
-- Configuration persistence
-- Result caching
-- Multiple file selection
-- Advanced filtering
-
-### Phase 3 Features
-- Themes and color schemes
-- Mouse support
-- Split panes (compare files)
-- Fuzzy search in results
-- Export to various formats
-
-## Questions?
 
 Refer to:
 - `docs/copilot/worklog/2025-12.md` - Recent changes and decisions

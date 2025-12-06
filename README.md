@@ -1,4 +1,4 @@
-> **Note:** This README was AI-generated to document the implemented solution.
+> **Note:** This README was partially AI-generated to document the implemented solution.
 
 # doc-simfinder
 
@@ -25,7 +25,7 @@ cd doc-simfinder
 cargo build --release
 ```
 
-The compiled binary will be at `target/release/doc-simfinder` (or `doc-simfinder.exe` on Windows).
+The compiled binary will be at `target/release/doc-simfinder`
 
 ## Usage
 
@@ -45,6 +45,8 @@ doc-simfinder --query "rust async" --search-path ./src --top-n 10 --threshold 0.
 - `--top-n, -n` - Number of top results per file (default: 3)
 - `--threshold, -t` - Minimum similarity score (default: 0.4)
 - `--window-size, -w` - Sliding window size (default: 150)
+- `--file-exts` - File extensions, comma-delimited (default: .txt, .md)
+
 
 ### TUI Mode
 Interactive terminal interface:
@@ -53,13 +55,14 @@ doc-simfinder --tui
 ```
 
 **TUI Controls:**
-- `Tab` / `Shift+Tab` - Navigate between fields
+- `Ctrl+j` / `Ctrl+k` - Navigate between fields
 - Type to edit path and query inputs
 - `Enter` - Start analysis (when ready)
 - `↑/↓` or `j/k` - Navigate results
 - `Enter` - View file details
 - `Backspace` - Go back
 - `Ctrl+R` - Reanalyze
+- `Ctrl+O` - Open file path location (When viewing results)
 - `Ctrl+Q` or `Ctrl+C` - Quit
 
 ## Limitations
@@ -73,7 +76,7 @@ doc-simfinder --tui
 
 Default settings can be found in `src/config/mod.rs`. Key parameters:
 - Window size: 500 characters
-- Max window size: 5000q characters  
+- Max window size: 5000 characters  
 - Similarity threshold: 0.75
 - Top N chunks per file: 5
 - Thread count: Auto-detected based on CPU cores
@@ -82,15 +85,7 @@ Default settings can be found in `src/config/mod.rs`. Key parameters:
 
 Search for Rust error handling patterns:
 ```bash
-doc-simfinder --query "Result<T, E>" --search-path ./rust-projects --top-n 5
-```
-
-Find documentation about configuration:
-```bash
-doc-simfinder --tui
-# Then type path: ./docs
-# Then type query: configuration settings
-# Press Enter to analyze
+doc-simfinder --query "Result" --search-path ./rust-projects --top-n 5
 ```
 
 ## License

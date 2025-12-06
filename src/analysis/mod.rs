@@ -2,6 +2,7 @@ use std::{
     fmt::Display,
     fs::{self, File},
     io::Read,
+    panic::AssertUnwindSafe,
     path::{Path, PathBuf},
     time::Instant,
 };
@@ -10,21 +11,30 @@ use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
 use rayon::prelude::*;
 
 use crate::{
-    config::{Config, SimilarityAlgorithm},
+    config::{ALLOWED_BINARY_FILE_EXTS, Config, SimilarityAlgorithm},
     errors::{ChunkError, ScoreError},
 };
 
 // Return a score for each file
 // Needs a weighting function for multiple matches within a file
-// Parallelize??
 pub fn analyse_files(files: &Vec<PathBuf>, config: &Config) -> Result<Vec<FileScore>, ScoreError> {
     let results: Vec<Result<FileScore, ScoreError>> = files
         .par_iter()
         .with_min_len(2)
-        .map(|f| score_file(f, config))
+        .map(|f| {
+            // Wrap each file processing in catch_unwind to handle panics
+            // For some reason pdf_extract can panic on corrupted PDFs
+            match std::panic::catch_unwind(AssertUnwindSafe(|| score_file(f, config))) {
+                Ok(result) => result,
+                Err(_) => Err(ScoreError::ChunkError(ChunkError::PdfProcessing(format!(
+                    "Processing panicked for file: {}",
+                    f.display()
+                )))),
+            }
+        })
         .collect();
-    
-    // Filter out errors gracefully - skip files that can't be read
+
+    // Filter out errors but log them
     let successful_results: Vec<FileScore> = results
         .into_iter()
         .filter_map(|result| {
@@ -38,7 +48,7 @@ pub fn analyse_files(files: &Vec<PathBuf>, config: &Config) -> Result<Vec<FileSc
             }
         })
         .collect();
-    
+
     Ok(successful_results)
 }
 
@@ -106,63 +116,95 @@ pub fn score_file(file: &Path, config: &Config) -> Result<FileScore, ScoreError>
 }
 
 /// Check if a file appears to be binary by reading the first few bytes
+/// Just in case we try to read a binary file as UTF-8 text
 fn is_likely_binary(file: &Path) -> Result<bool, std::io::Error> {
     // Quick extension check first (avoids I/O for obvious cases)
     if let Some(ext) = file.extension() {
         let ext_lower = ext.to_string_lossy().to_lowercase();
         // Common binary extensions
-        if matches!(ext_lower.as_str(), 
-            "exe" | "dll" | "so" | "dylib" | "bin" | "obj" | "o" | 
-            "zip" | "tar" | "gz" | "7z" | "rar" | "bz2" |
-            "png" | "jpg" | "jpeg" | "gif" | "bmp" | "ico" | "webp" |
-            "mp3" | "mp4" | "avi" | "mkv" | "mov" | "flac" | "wav" |
-            "pdf" | "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx"
+        if matches!(
+            ext_lower.as_str(),
+            "exe"
+                | "dll"
+                | "so"
+                | "dylib"
+                | "bin"
+                | "obj"
+                | "o"
+                | "zip"
+                | "tar"
+                | "gz"
+                | "7z"
+                | "rar"
+                | "bz2"
+                | "png"
+                | "jpg"
+                | "jpeg"
+                | "gif"
+                | "bmp"
+                | "ico"
+                | "webp"
+                | "mp3"
+                | "mp4"
+                | "avi"
+                | "mkv"
+                | "mov"
+                | "flac"
+                | "wav"
+                | "pdf"
+                | "doc"
+                | "docx"
+                | "xls"
+                | "xlsx"
+                | "ppt"
+                | "pptx"
         ) {
             return Ok(true);
         }
     }
-    
+
     let mut file = File::open(file)?;
-    let mut buffer = [0u8; 1024]; // Check first 1KB (reduced from 8KB)
+    let mut buffer = [0u8; 1024]; // Check first 1KB
     let bytes_read = file.read(&mut buffer)?;
-    
+
     if bytes_read == 0 {
         return Ok(false); // Empty file, treat as text
     }
-    
+
     // Check for null bytes (common in binary files)
     let has_null = buffer[..bytes_read].contains(&0);
-    
+
     // Check for high ratio of non-printable characters
     let non_printable_count = buffer[..bytes_read]
         .iter()
         .filter(|&&b| b < 32 && b != b'\n' && b != b'\r' && b != b'\t')
         .count();
-    
+
     let non_printable_ratio = non_printable_count as f64 / bytes_read as f64;
-    
+
     Ok(has_null || non_printable_ratio > 0.3)
 }
 
 // We want some dynamic window sizing based on the query string.
 fn get_chunks(file: &Path, window: &SlidingWindow) -> Result<Vec<Chunk>, ChunkError> {
-    // Check if file is likely binary before attempting to read as UTF-8
-    if is_likely_binary(file)? {
-        return Err(ChunkError::BinaryFile(
-            file.display().to_string()
-        ));
+    let file_ext = file.extension().unwrap_or_default().to_string_lossy();
+    // Check if file is allowed and if not if it is likely binary before attempting to read as UTF-8
+    if !ALLOWED_BINARY_FILE_EXTS.contains(&format!(".{}", &file_ext).as_str())
+        && is_likely_binary(&file)?
+    {
+        return Err(ChunkError::BinaryFile(file.display().to_string()));
     }
-    
-    // Attempt to read file as UTF-8 text
-    let content = fs::read_to_string(file).map_err(|e| {
-        // Check if it's a UTF-8 error specifically
-        if e.kind() == std::io::ErrorKind::InvalidData {
-            ChunkError::InvalidUtf8(file.display().to_string())
-        } else {
-            ChunkError::Io(e)
+
+    // TODO! I should refactor this
+    // Quick implementation for project finishing
+    let content = match file_ext.as_ref() {
+        "pdf" => extract_pdf_text(file)?,
+        _ => {
+            // Attempt to read file as UTF-8 text
+            read_text_file(file)?
         }
-    })?;
-    
+    };
+
     // More efficient: work with char indices directly instead of collecting all chars
     let char_indices: Vec<(usize, char)> = content.char_indices().collect();
     let char_count = char_indices.len();
@@ -172,7 +214,7 @@ fn get_chunks(file: &Path, window: &SlidingWindow) -> Result<Vec<Chunk>, ChunkEr
 
     while start_idx < char_count {
         let end_idx = (start_idx + window.window_size).min(char_count);
-        
+
         // Get byte positions for slicing
         let start_byte = char_indices[start_idx].0;
         let end_byte = if end_idx < char_count {
@@ -180,7 +222,7 @@ fn get_chunks(file: &Path, window: &SlidingWindow) -> Result<Vec<Chunk>, ChunkEr
         } else {
             content.len()
         };
-        
+
         let chunk_text = content[start_byte..end_byte].to_string();
 
         chunks.push(Chunk {
@@ -295,6 +337,74 @@ fn calculate_sliding_window(query_len: usize, config: &Config) -> SlidingWindow 
         window_size: ws,
         overlap: ws / 10,
     }
+}
+
+/// Extract text from a PDF file with panic recovery using lopdf
+fn extract_pdf_text(file: &Path) -> Result<String, ChunkError> {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    // Check file size before processing
+    let metadata = fs::metadata(file).map_err(|e| ChunkError::Io(e))?;
+    
+    const MAX_PDF_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
+    if metadata.len() > MAX_PDF_SIZE {
+        return Err(ChunkError::PdfProcessing(format!(
+            "PDF too large ({}MB > 10MB)",
+            metadata.len() / (1024 * 1024)
+        )));
+    }
+
+    let file_path = file.to_path_buf();
+
+    // Wrap in catch_unwind to handle potential panics
+    match catch_unwind(AssertUnwindSafe(move || {
+        extract_pdf_text_inner(&file_path)
+    })) {
+        Ok(Ok(text)) => Ok(text),
+        Ok(Err(e)) => Err(e),
+        Err(_) => Err(ChunkError::PdfProcessing(
+            "PDF parser panicked (corrupted or unsupported format)".to_string()
+        )),
+    }
+}
+
+/// Inner PDF text extraction using lopdf
+/// Referred to example from lopdf repo:
+/// https://github.com/J-F-Liu/lopdf/blob/main/examples/extract_text.rs
+fn extract_pdf_text_inner(file_path: &Path) -> Result<String, ChunkError> {
+    use lopdf::Document;
+
+    let doc = Document::load(file_path)
+        .map_err(|e| ChunkError::PdfProcessing(format!("Failed to load PDF: {}", e)))?;
+
+    let mut text = String::new();
+    let pages = doc.get_pages();
+
+    for (page_num, _) in pages.iter() {
+        if let Ok(page_text) = doc.extract_text(&[*page_num]) {
+            text.push_str(&page_text);
+            text.push('\n');
+        }
+    }
+
+    if text.trim().is_empty() {
+        return Err(ChunkError::PdfProcessing(
+            "PDF contains no extractable text (might be scanned/image-only)".to_string()
+        ));
+    }
+
+    Ok(text)
+}
+
+/// Read a text file as UTF-8
+fn read_text_file(file: &Path) -> Result<String, ChunkError> {
+    fs::read_to_string(file).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::InvalidData {
+            ChunkError::InvalidUtf8(file.display().to_string())
+        } else {
+            ChunkError::Io(e)
+        }
+    })
 }
 
 // Use chunking to split a file into multiple chunks with overlap

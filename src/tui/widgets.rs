@@ -349,12 +349,17 @@ impl Dashboard {
                 frame.render_widget(error_widget, area);
             } else {
                 let options_text = format!(
-                    "- Window Size: {:<15}\n- Max Window: {:<15}\n- Threshold: {:<15.2}\n- Top N: {:<15}\n- Threads: {:<15}",
+                    "- Window Size: {:<15}\n- Max Window: {:<15}\n- Threshold: {:<15.2}\n- Top N: {:<15}\n- Threads: {:<15}\n- File Exts: {:<15}",
                     config.window_size,
                     config.max_window_size,
                     config.threshold,
                     config.top_n,
-                    config.num_threads
+                    if config.num_threads > 0 {
+                        config.num_threads.to_string()
+                    } else {
+                        "All".into()
+                    },
+                    config.file_exts.join(", ")
                 );
                 let options_widget = Paragraph::new(options_text).block(
                     Block::default()

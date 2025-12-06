@@ -1,3 +1,5 @@
+> **Note:** This README was AI-generated to document the implemented solution.
+
 # UI Module
 
 ## Presentation (`src/presentation/mod.rs`)

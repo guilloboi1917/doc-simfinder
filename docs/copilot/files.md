@@ -1,3 +1,5 @@
+> **Note:** This README was AI-generated to document the implemented solution.
+
 # Files Module
 
 ## Module: `src/file_walker/mod.rs`

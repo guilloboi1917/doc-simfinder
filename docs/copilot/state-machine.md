@@ -1,3 +1,5 @@
+> **Note:** This README was AI-generated to document the implemented solution.
+
 # State Machine
 
 ## Module: `src/state_machine/`

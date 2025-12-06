@@ -32,6 +32,15 @@ pub struct Config {
     pub top_n: usize,
 }
 
+// Allowed file extensions
+pub static ALLOWED_UTF8_FILE_EXTS: &[&str] = &[
+    ".txt", ".md", ".rs", ".py", ".java", ".c", ".cpp", ".js", ".ts", ".html", ".css", ".json",
+    ".yaml", ".yml", ".toml", ".xml",
+];
+
+// Currently we only allow for PDF as binary file extension
+pub static ALLOWED_BINARY_FILE_EXTS: &[&str] = &[".pdf"];
+
 impl Config {
     pub fn validate(&self) -> Result<(), ConfigError> {
         // Basic validation used by CLI and programmatic callers
@@ -47,6 +56,31 @@ impl Config {
             return Err(ConfigError);
         }
 
+        if self.file_exts.is_empty() {
+            return Err(ConfigError);
+        }
+
+        if self.threshold < 0.0 || self.threshold > 1.0 {
+            return Err(ConfigError);
+        }
+
+        if self.top_n == 0 {
+            return Err(ConfigError);
+        }
+
+        if self.max_search_depth == 0 {
+            return Err(ConfigError);
+        }
+
+        if self.file_exts.iter().any(|ext| {
+            !ALLOWED_BINARY_FILE_EXTS.contains(&ext.as_str())
+                && !ALLOWED_UTF8_FILE_EXTS.contains(&ext.as_str())
+        }) {
+            return Err(ConfigError);
+        }
+
+        // More validation needed here...
+
         Ok(())
     }
 }
@@ -57,8 +91,8 @@ impl Default for Config {
         Self {
             search_path: Default::default(),
             max_search_depth: 5,
-            num_threads: 0,                                         // 0 means all
-            file_exts: vec![".txt".to_string(), ".md".to_string()], // extend these
+            num_threads: 0, // 0 means all threads are used
+            file_exts: vec![".txt".to_string(), ".md".to_string()], // TODO! extend these
             output_file: None,
             query: Default::default(),
             algorithm: SimilarityAlgorithm::Fuzzy,

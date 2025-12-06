@@ -1,3 +1,5 @@
+> **Note:** This README was AI-generated to document the implemented solution.
+
 # doc-simfinder
 
 A fast, concurrent document similarity search tool written in Rust. Search through your text documents using fuzzy matching with sliding-window chunking to find the most relevant files and text snippets.
@@ -62,18 +64,18 @@ doc-simfinder --tui
 
 ## Limitations
 
-- **File types**: Currently supports `.txt` and `.md` files only
+- **File types**: Supports common utf-8 files such as `.txt`, `.md`, and only `.pdf` binary files (PDF text extraction via lopdf)
 - **Text input**: No cursor movement in TUI - use backspace to edit from the end
 - **No filtering**: Results cannot be filtered by filename or path patterns yet
-- **Binary files**: Automatically skipped but may cause warnings for edge cases
+- **PDF limitations**: Image-only/scanned PDFs cannot be processed; 10MB size limit for memory safety
 
 ## Configuration
 
 Default settings can be found in `src/config/mod.rs`. Key parameters:
-- Window size: 150 characters
-- Max window size: 500 characters  
-- Similarity threshold: 0.4
-- Top N chunks per file: 3
+- Window size: 500 characters
+- Max window size: 5000q characters  
+- Similarity threshold: 0.75
+- Top N chunks per file: 5
 - Thread count: Auto-detected based on CPU cores
 
 ## Examples

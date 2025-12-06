@@ -14,6 +14,8 @@ pub enum ChunkError {
     InvalidUtf8(String),
     #[error("File appears to be binary: {0}")]
     BinaryFile(String),
+    #[error("Pdf processing error: {0}")]
+    PdfProcessing(String),
 }
 
 #[derive(Debug, thiserror::Error)]

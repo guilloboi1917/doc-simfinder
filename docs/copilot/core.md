@@ -1,3 +1,5 @@
+> **Note:** This README was AI-generated to document the implemented solution.
+
 # Core Analysis Module
 
 ## Module: `src/analysis/mod.rs`

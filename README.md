@@ -1,4 +1,6 @@
-> **Note:** This README was partially AI-generated to document the implemented solution.
+> **Disclaimer:** This README was partially AI-generated to document the implemented solution.
+
+> **Note:** If you wish the see the partial solution created without AI, check the branch "no-ai"
 
 # doc-simfinder
 
